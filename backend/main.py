@@ -45,3 +45,7 @@ async def add_medication(med: Medicine):
     except Exception as e:
         return {"status": "error", "detail": str(e)}
 print(os.getenv("TWILIO_SMS_FROM"))
+
+include_router = [upload_router, auth_router]
+for router in include_router:
+    app.include_router(router)  
