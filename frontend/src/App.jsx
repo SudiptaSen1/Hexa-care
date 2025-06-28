@@ -7,6 +7,7 @@ import { Dashboard } from "../pages/Dashboard"
 import Login from "../pages/Login"
 import Chat from "../pages/Chat"
 import Notification from "../pages/Notification"
+import Upload from "../pages/Upload"
 
 const appRouter = createBrowserRouter([
 	{
@@ -46,6 +47,13 @@ const appRouter = createBrowserRouter([
         element:
           <>
             <Notification />
+          </>
+      },
+      {
+        path: '/upload',
+        element:
+          <>
+            <Upload />
           </>
       }
     ]
