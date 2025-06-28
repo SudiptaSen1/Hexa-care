@@ -131,7 +131,7 @@ export const Dashboard = () => {
               <CardContent>
                 <div className="text-2xl font-bold">{stat.value}</div>
                 <p className="text-xs text-muted-foreground">
-                  <span className="text-pink-600">{stat.change}</span> from last check
+                  <span className="text-rose-600">{stat.change}</span> from last check
                 </p>
               </CardContent>
             </Card>
@@ -139,52 +139,7 @@ export const Dashboard = () => {
         })}
       </div>
 
-      {/* Recent Consultations */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Consultations</CardTitle>
-              <CardDescription>Your latest health check sessions</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {recentSessions.map((session) => (
-                  <div
-                    key={session.id}
-                    className="flex items-center justify-between p-4 border rounded-lg  transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-shrink-0">
-                        <Stethoscope className="h-8 w-8 text-red-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {session.title}
-                        </p>
-                        <p className="text-sm  truncate">
-                          {session.lastMessage}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge variant={session.status === 'active' ? 'default' : 'secondary'}>
-                        {session.status === 'active' ? (
-                          <Clock className="mr-1 h-3 w-3" />
-                        ) : (
-                          <CheckCircle className="mr-1 h-3 w-3" />
-                        )}
-                        {session.status}
-                      </Badge>
-                      <span className="text-xs ">{session.timestamp}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+     
     </div>
   );
 };
