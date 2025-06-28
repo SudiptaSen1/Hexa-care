@@ -1,7 +1,7 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from pymongo import MongoClient
 from datetime import datetime
-from utils.sms import send_sms
+from utils.notificatiins import send_sms, send_whatsapp
 import pytz
 import os
 from dotenv import load_dotenv
@@ -20,7 +20,7 @@ def check_and_send_sms():
     for med in results:
         start = med["start_date"]
 
-        # Ensure it's a datetime and convert to date
+        # Convert datetime to date if needed
         if isinstance(start, datetime):
             start = start.date()
 
@@ -30,7 +30,10 @@ def check_and_send_sms():
             continue  # skip if expired or not started yet
 
         message = f"👋 Hello {med['patient_name']}, it's {current_time_str}. Please take your 💊 {med['name']} ({med['dosage']})."
+
+        # ✅ Send both SMS and WhatsApp
         send_sms(med["contact_number"], message)
+        send_whatsapp(med["contact_number"], message)
 
 def start_scheduler():
     scheduler = BackgroundScheduler()
