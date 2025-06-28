@@ -23,7 +23,7 @@ export const Landing = () => {
         <div className="max-w-4xl mx-auto">
           <h1 className="text-5xl font-bold mb-6">
             Your Health, Our{' '}
-            <span className="bg-gradient-to-r from-red-600 to-pink-600 bg-clip-text text-transparent">
+            <span className="bg-primary bg-clip-text text-transparent">
               AI-Powered Priority
             </span>
           </h1>
@@ -58,8 +58,8 @@ export const Landing = () => {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           <Card className="group hover:shadow-lg transition-all duration-300 border-0 backdrop-blur-sm">
             <CardHeader>
-              <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                <Stethoscope className="h-6 w-6 text-blue-600" />
+              <div className="h-12 w-12 bg-secondary rounded-lg flex items-center justify-center mb-4">
+                <Stethoscope className="h-6 w-6 text-primary" />
               </div>
               <CardTitle>AI Diagnostics</CardTitle>
               <CardDescription>
@@ -70,8 +70,8 @@ export const Landing = () => {
 
           <Card className="group hover:shadow-lg transition-all duration-300 border-0 backdrop-blur-sm">
             <CardHeader>
-              <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-                <FileHeart className="h-6 w-6 text-green-600" />
+              <div className="h-12 w-12 bg-secondary rounded-lg flex items-center justify-center mb-4">
+                <FileHeart className="h-6 w-6 text-primary" />
               </div>
               <CardTitle>Smart Health Records</CardTitle>
               <CardDescription>
@@ -82,8 +82,8 @@ export const Landing = () => {
 
           <Card className="group hover:shadow-lg transition-all duration-300 border-0 backdrop-blur-sm">
             <CardHeader>
-              <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
-                <HeartPulse className="h-6 w-6 text-orange-600" />
+              <div className="h-12 w-12 bg-secondary rounded-lg flex items-center justify-center mb-4">
+                <HeartPulse className="h-6 w-6 text-primary" />
               </div>
               <CardTitle>Personalized Care Plans</CardTitle>
               <CardDescription>
@@ -94,8 +94,8 @@ export const Landing = () => {
 
           <Card className="group hover:shadow-lg transition-all duration-300 border-0 backdrop-blur-sm">
             <CardHeader>
-              <div className="h-12 w-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                <ShieldCheck className="h-6 w-6 text-purple-600" />
+              <div className="h-12 w-12 bg-secondary rounded-lg flex items-center justify-center mb-4">
+                <ShieldCheck className="h-6 w-6 text-primary" />
               </div>
               <CardTitle>Privacy & Compliance</CardTitle>
               <CardDescription>
@@ -106,8 +106,8 @@ export const Landing = () => {
 
           <Card className="group hover:shadow-lg transition-all duration-300 border-0 backdrop-blur-sm">
             <CardHeader>
-              <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
-                <Clock8 className="h-6 w-6 text-red-600" />
+              <div className="h-12 w-12 bg-secondary rounded-lg flex items-center justify-center mb-4">
+                <Clock8 className="h-6 w-6 text-primary" />
               </div>
               <CardTitle>24/7 Virtual Support</CardTitle>
               <CardDescription>
@@ -118,8 +118,8 @@ export const Landing = () => {
 
           <Card className="group hover:shadow-lg transition-all duration-300 border-0 backdrop-blur-sm">
             <CardHeader>
-              <div className="h-12 w-12 bg-teal-100 rounded-lg flex items-center justify-center mb-4">
-                <Syringe className="h-6 w-6 text-teal-600" />
+              <div className="h-12 w-12 bg-secondary rounded-lg flex items-center justify-center mb-4">
+                <Syringe className="h-6 w-6 text-primary" />
               </div>
               <CardTitle>Medication & Vaccine Alerts</CardTitle>
               <CardDescription>
@@ -131,14 +131,14 @@ export const Landing = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="bg-gradient-to-r from-red-600 to-pink-600 py-16">
+      <section className="bg-primary py-16">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Take Charge of Your Health Today</h2>
-          <p className="text-xl text-pink-100 mb-8 max-w-2xl mx-auto">
+          <p className="text-xl text-rose-100 mb-8 max-w-2xl mx-auto">
             Join thousands who trust HexaCare for smarter, safer, and more accessible healthcare.
           </p>
           <Link to="/login">
-            <Button size="lg" className="px-8 py-3 text-lg">
+            <Button size="lg" variant='outline' className="px-8 py-3 text-lg">
               Get Started
             </Button>
           </Link>

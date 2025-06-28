@@ -5,7 +5,7 @@ import { Landing } from "../pages/Landing"
 import MainLayout from "../layout/MainLayout"
 import { Dashboard } from "../pages/Dashboard"
 import Login from "../pages/Login"
-import { Chat } from "../pages/Chat"
+import Chat from "../pages/Chat"
 import Notification from "../pages/Notification"
 
 const appRouter = createBrowserRouter([

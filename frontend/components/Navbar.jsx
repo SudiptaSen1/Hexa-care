@@ -7,8 +7,8 @@ const Navbar = () => {
     <header className="border-b backdrop-blur-md">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <ScanHeart className="h-8 w-8 text-red-600" />
-            <span className="text-2xl font-bold bg-gradient-to-r from-red-600 to-pink-600 bg-clip-text text-transparent">
+            <ScanHeart className="h-8 w-8 text-primary" />
+            <span className="text-2xl font-bold bg-primary bg-clip-text text-transparent">
               HexaCare
             </span>
           </div>
