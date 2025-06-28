@@ -11,7 +11,8 @@ import {
   DollarSign,
   CheckCircle,
   Syringe,
-  Lock
+  Lock,
+  Brain
 } from 'lucide-react';
 
 export const Dashboard = () => {
@@ -53,29 +54,7 @@ export const Dashboard = () => {
     }
   ];
 
-  const recentSessions = [
-    {
-      id: '1',
-      title: 'Cardiology Checkup',
-      status: 'active',
-      lastMessage: 'Your ECG report shows improvement...',
-      timestamp: '2 hours ago'
-    },
-    {
-      id: '2',
-      title: 'Diabetes Consultation',
-      status: 'completed',
-      lastMessage: 'HbA1c levels are stable...',
-      timestamp: '1 day ago'
-    },
-    {
-      id: '3',
-      title: 'General Health Review',
-      status: 'active',
-      lastMessage: 'Continue with your current medication...',
-      timestamp: '2 days ago'
-    }
-  ];
+
 
   return (
     <div className="space-y-8 px-10 py-5">
@@ -86,7 +65,7 @@ export const Dashboard = () => {
           <p className=" mt-1">Welcome back! Here's your health monitoring overview.</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => navigate('/checkup')} variant="outline">
+          <Button onClick={() => navigate('/checkup')} >
             <Syringe className="mr-2 h-4 w-4" />
             Health Checkup
           </Button>
@@ -94,52 +73,89 @@ export const Dashboard = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon;
-          return stat.isPremium && !isSubscribed ? (
-            <Card key={index} className="relative overflow-hidden  group">
-              <div className="pointer-events-none">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium ">
-                    {stat.title}
-                  </CardTitle>
-                  <Icon className="h-4 w-4 " />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold ">{stat.value}</div>
-                  <p className="text-xs text-muted-foreground">
-                    <span className="">{stat.change}</span> from last check
-                  </p>
-                </CardContent>
-              </div>
-              <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300  backdrop-blur-sm">
-                <Lock className="h-8 w-8  drop-shadow-lg mb-3" />
-                <Button size="sm" onClick={() => navigate('/settings?tab=account')}>
-                  Upgrade to Pro
-                </Button>
-              </div>
-            </Card>
-          ) : (
-            <Card key={index} className="relative overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium ">
-                  {stat.title}
-                </CardTitle>
-                <Icon className={`h-4 w-4 ${stat.color}`} />
+      {/* Services We Offer */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Services We Offer</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+          {/* Chat Service */}
+          <Card
+            onClick={() => navigate('/chat')}
+            className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+          >
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg font-medium">AI Health Assistant</CardTitle>
+              <Brain className="h-5 w-5 text-primary" /> {/* Use Lucide's Brain icon if available */}
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Talk to our AI chatbot for health queries, tips, and personalized assistance.
+              </p>
+            </CardContent>
+          </Card>
+
+
+          {/* Upload Reports */}
+          <Card
+            onClick={() => navigate('/upload')}
+            className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+          >
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg font-medium">Upload Reports</CardTitle>
+              <FileHeart className="h-5 w-5 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Upload your health documents for review by our team.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Health Timeline (Locked) */}
+          <Card className="relative overflow-hidden group">
+            <div className="pointer-events-none">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-lg font-medium">Health Timeline</CardTitle>
+                <Clock className="h-5 w-5 text-primary" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <p className="text-xs text-muted-foreground">
-                  <span className="text-rose-600">{stat.change}</span> from last check
+                <p className="text-sm text-muted-foreground">
+                  Track your long-term health journey over time.
                 </p>
               </CardContent>
-            </Card>
-          );
-        })}
+            </div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-sm bg-black/30">
+              <Lock className="h-8 w-8 mb-3 text-white" />
+              <Button size="sm" onClick={() => navigate('/settings?tab=account')}>
+                Upgrade to Pro
+              </Button>
+            </div>
+          </Card>
+
+          {/* RAG Summary (Locked) */}
+          <Card className="relative overflow-hidden group">
+            <div className="pointer-events-none">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-lg font-medium">RAG-based Summary</CardTitle>
+                <CheckCircle className="h-5 w-5 text-primary" />
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  AI-driven Red-Amber-Green health status summary.
+                </p>
+              </CardContent>
+            </div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-sm bg-black/30">
+              <Lock className="h-8 w-8 mb-3 text-white" />
+              <Button size="sm" onClick={() => navigate('/settings?tab=account')}>
+                Upgrade to Pro
+              </Button>
+            </div>
+          </Card>
+        </div>
       </div>
 
-     
+
     </div>
   );
 };
