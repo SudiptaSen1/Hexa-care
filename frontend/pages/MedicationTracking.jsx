@@ -14,7 +14,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'https://fd41-45-64-237-226.ngrok-free.app/';
 
 const MedicationTracking = () => {
   const [patientName, setPatientName] = useState('');

@@ -54,7 +54,8 @@ const appRouter = createBrowserRouter([
       path: '/upload',
         element:
           <>
-            <Upload />
+            <Upload /> 
+          </>
       },
       {
 
