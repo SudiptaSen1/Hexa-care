@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from routes.upload_routes import router as upload_router
 from routes.auth_route import router as auth_router
 from routes.prescription_routes import router as prescription_router
+from routes.medication_routes import router as medication_router
+from routes.twilio_webhook import router as webhook_router
 import utils.cloudinary_config  # auto-loads config
 from utils.schedular import start_scheduler
 from pydantic import BaseModel
@@ -52,6 +54,6 @@ async def add_medication(med: Medicine):
 
 print(os.getenv("TWILIO_SMS_FROM"))
 
-include_router = [upload_router, auth_router, prescription_router]
+include_router = [upload_router, auth_router, prescription_router, medication_router, webhook_router]
 for router in include_router:
     app.include_router(router)

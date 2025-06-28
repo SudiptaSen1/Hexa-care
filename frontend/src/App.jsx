@@ -8,6 +8,8 @@ import Login from "../pages/Login"
 import Chat from "../pages/Chat"
 import Notification from "../pages/Notification"
 import Upload from "../pages/Upload"
+import MedicationTracking from "../pages/MedicationTracking"
+
 
 const appRouter = createBrowserRouter([
 	{
@@ -48,12 +50,19 @@ const appRouter = createBrowserRouter([
           <>
             <Notification />
           </>
-      },
-      {
-        path: '/upload',
+      },{
+      path: '/upload',
         element:
           <>
             <Upload />
+      },
+      {
+
+        path: '/medication-tracking',
+        element:
+          <>
+            <MedicationTracking />
+
           </>
       }
     ]
