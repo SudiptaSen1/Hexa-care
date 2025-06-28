@@ -4,11 +4,13 @@ import os
 from pdf2image import convert_from_path
 import json
 from datetime import datetime, timedelta
+import dotenv
 
+dotenv.load_dotenv()
 # IMPORTANT: Replace with your actual API key.
 # For production, consider using environment variables or a more secure method
 # to store and access your API key.
-API_KEY = "AIzaSyA9Wb32KCz3KfWPEMH8yIJm4sKvH5kXTGs" # <--- REPLACE THIS WITH YOUR ACTUAL API KEY
+API_KEY = os.getenv("GEMINI_API_KEY") # <--- REPLACE THIS WITH YOUR ACTUAL API KEY
 genai.configure(api_key=API_KEY)
 
 def process_file(file_path):
@@ -159,7 +161,7 @@ You are an expert medical assistant. Your task is to extract prescription detail
 4.  Provide the output ONLY in JSON format. Do not include any other text, explanations, or formatting outside of the JSON.
 
 Here is the desired JSON structure:
-{{
+{{"patient_name": "name",
   "age": "string",
   "date": "YYYY-MM-DD",
   "medicines": [
