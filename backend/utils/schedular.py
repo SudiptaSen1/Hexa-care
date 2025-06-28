@@ -13,9 +13,9 @@ db = client[os.getenv("DB_NAME", "hexacare")]
 meds = db["medications"]
 medication_logs = db["medication_logs"]
 
-async def log_medication_reminder(medication_id: str, patient_name: str, contact_number: str, scheduled_time: str):
+def log_medication_reminder_sync(medication_id: str, patient_name: str, contact_number: str, scheduled_time: str):
     """
-    Log when a medication reminder is sent
+    Synchronous version of log_medication_reminder for use in scheduler
     """
     try:
         log_entry = {
@@ -29,9 +29,10 @@ async def log_medication_reminder(medication_id: str, patient_name: str, contact
         }
         
         result = medication_logs.insert_one(log_entry)
+        print(f"✅ Logged medication reminder: {result.inserted_id}")
         return str(result.inserted_id)
     except Exception as e:
-        print(f"Error logging medication reminder: {e}")
+        print(f"❌ Error logging medication reminder: {e}")
         return None
 
 def check_and_send_sms():
@@ -65,21 +66,12 @@ def check_and_send_sms():
 
         # Log the reminder being sent
         medication_id = str(med.get("_id", ""))
-        log_id = None
-        try:
-            log_entry = {
-                "medication_id": medication_id,
-                "patient_name": med['patient_name'],
-                "contact_number": med["contact_number"],
-                "scheduled_time": current_time_str,
-                "sent_time": now,
-                "status": "pending",
-                "response_received": False
-            }
-            log_result = medication_logs.insert_one(log_entry)
-            log_id = str(log_result.inserted_id)
-        except Exception as e:
-            print(f"Error logging medication reminder: {e}")
+        log_id = log_medication_reminder_sync(
+            medication_id=medication_id,
+            patient_name=med['patient_name'],
+            contact_number=med["contact_number"],
+            scheduled_time=current_time_str
+        )
 
         # Send both SMS and WhatsApp
         print(f"Sending reminder to {med['contact_number']}: {message}")

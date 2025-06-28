@@ -29,11 +29,32 @@ async def log_medication_reminder(medication_id: str, patient_name: str, contact
         print(f"Error logging medication reminder: {e}")
         return None
 
+def normalize_phone_number(phone_number: str) -> str:
+    """
+    Normalize phone number by removing prefixes and formatting consistently
+    """
+    # Remove whatsapp: prefix if present
+    phone_number = phone_number.replace('whatsapp:', '')
+    
+    # Remove any spaces, dashes, or other formatting
+    phone_number = re.sub(r'[^\d+]', '', phone_number)
+    
+    # Ensure it starts with + if it doesn't already
+    if not phone_number.startswith('+'):
+        phone_number = '+' + phone_number
+    
+    return phone_number
+
 async def process_medication_response(contact_number: str, message: str):
     """
     Process incoming SMS/WhatsApp responses for medication confirmation
     """
     try:
+        # Normalize the contact number
+        normalized_contact = normalize_phone_number(contact_number)
+        print(f"Processing response from {contact_number} -> normalized: {normalized_contact}")
+        print(f"Message: {message}")
+        
         # Clean and normalize the message
         message_lower = message.lower().strip()
         
@@ -49,22 +70,53 @@ async def process_medication_response(contact_number: str, message: str):
         
         # Find the most recent pending medication log for this contact number
         current_time = datetime.now()
-        # Look for logs from the last 2 hours
-        time_threshold = current_time - timedelta(hours=2)
+        # Look for logs from the last 4 hours (increased window)
+        time_threshold = current_time - timedelta(hours=4)
+        
+        # Try multiple contact number formats
+        possible_numbers = [
+            normalized_contact,
+            contact_number,
+            contact_number.replace('whatsapp:', ''),
+            '+' + contact_number.replace('whatsapp:', '').replace('+', ''),
+        ]
+        
+        # Remove duplicates while preserving order
+        possible_numbers = list(dict.fromkeys(possible_numbers))
+        
+        print(f"Searching for logs with contact numbers: {possible_numbers}")
         
         recent_log = await medication_logs_collection.find_one({
-            "contact_number": contact_number,
+            "contact_number": {"$in": possible_numbers},
             "status": "pending",
             "sent_time": {"$gte": time_threshold}
         }, sort=[("sent_time", -1)])
         
         if not recent_log:
-            return {"status": "no_pending", "message": "No pending medication reminder found"}
+            print(f"No pending medication log found for any of these numbers: {possible_numbers}")
+            print(f"Time threshold: {time_threshold}")
+            
+            # Debug: Show recent logs for this number
+            debug_logs = []
+            async for log in medication_logs_collection.find({
+                "contact_number": {"$in": possible_numbers}
+            }).sort("sent_time", -1).limit(5):
+                debug_logs.append({
+                    "contact_number": log.get("contact_number"),
+                    "status": log.get("status"),
+                    "sent_time": log.get("sent_time"),
+                    "scheduled_time": log.get("scheduled_time")
+                })
+            
+            print(f"Recent logs for debugging: {debug_logs}")
+            return {"status": "no_pending", "message": "No pending medication reminder found", "debug_logs": debug_logs}
+        
+        print(f"Found matching log: {recent_log}")
         
         # Update the log status
         new_status = "taken" if is_positive else "missed"
         
-        await medication_logs_collection.update_one(
+        update_result = await medication_logs_collection.update_one(
             {"_id": recent_log["_id"]},
             {
                 "$set": {
@@ -76,11 +128,13 @@ async def process_medication_response(contact_number: str, message: str):
             }
         )
         
+        print(f"Update result: {update_result.modified_count} documents modified")
+        
         # Create confirmation record
         confirmation_record = {
             "medication_id": recent_log["medication_id"],
             "patient_name": recent_log["patient_name"],
-            "contact_number": contact_number,
+            "contact_number": normalized_contact,
             "scheduled_time": recent_log["scheduled_time"],
             "confirmation_time": current_time,
             "is_taken": is_positive,
@@ -94,11 +148,14 @@ async def process_medication_response(contact_number: str, message: str):
             "status": "success",
             "message": f"Medication marked as {new_status}",
             "is_taken": is_positive,
-            "patient_name": recent_log["patient_name"]
+            "patient_name": recent_log["patient_name"],
+            "log_updated": update_result.modified_count > 0
         }
         
     except Exception as e:
         print(f"Error processing medication response: {e}")
+        import traceback
+        traceback.print_exc()
         return {"status": "error", "message": str(e)}
 
 async def get_medication_adherence(patient_name: str, days: int = 7):

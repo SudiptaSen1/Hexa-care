@@ -17,10 +17,15 @@ async def twilio_webhook(
     """
     try:
         # Log the incoming message
-        print(f"Received message from {From}: {Body}")
+        print(f"=== TWILIO SMS WEBHOOK ===")
+        print(f"From: {From}")
+        print(f"Body: {Body}")
+        print(f"MessageSid: {MessageSid}")
         
         # Process the medication response
         result = await process_medication_response(From, Body)
+        
+        print(f"Processing result: {result}")
         
         # Prepare response message based on the result
         if result["status"] == "success":
@@ -43,6 +48,8 @@ async def twilio_webhook(
         
     except Exception as e:
         print(f"Error processing Twilio webhook: {e}")
+        import traceback
+        traceback.print_exc()
         # Return a generic response in case of error
         error_response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -62,13 +69,15 @@ async def whatsapp_webhook(
     Webhook endpoint for Twilio WhatsApp to handle incoming responses
     """
     try:
-        # Remove 'whatsapp:' prefix from the From number if present
-        contact_number = From.replace('whatsapp:', '')
+        print(f"=== WHATSAPP WEBHOOK ===")
+        print(f"From: {From}")
+        print(f"Body: {Body}")
+        print(f"MessageSid: {MessageSid}")
         
-        print(f"Received WhatsApp message from {contact_number}: {Body}")
+        # Process the medication response (From already includes whatsapp: prefix)
+        result = await process_medication_response(From, Body)
         
-        # Process the medication response
-        result = await process_medication_response(contact_number, Body)
+        print(f"Processing result: {result}")
         
         # Prepare response message
         if result["status"] == "success":
@@ -91,8 +100,25 @@ async def whatsapp_webhook(
         
     except Exception as e:
         print(f"Error processing WhatsApp webhook: {e}")
+        import traceback
+        traceback.print_exc()
         error_response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Message>Thank you for your message. We're experiencing technical difficulties. Please contact your healthcare provider if needed.</Message>
 </Response>"""
         return error_response
+
+# Add a test endpoint to manually test the response processing
+@router.post("/test-medication-response")
+async def test_medication_response(
+    contact_number: str = Form(...),
+    message: str = Form(...)
+):
+    """
+    Test endpoint to manually process medication responses
+    """
+    try:
+        result = await process_medication_response(contact_number, message)
+        return {"success": True, "result": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
