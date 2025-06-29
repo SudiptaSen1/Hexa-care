@@ -59,14 +59,23 @@ class ChatController:
         }
 
         try:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Invoking query graph for user {user_id}")
             final_state = await query_graph.ainvoke(initial_state)
             response_content = final_state.get("answer", "No answer generated.")
             updated_chat_history = final_state.get("chat_history", [])
 
+            # Convert BaseMessage objects to dict for storage
+            chat_history_dicts = []
+            for msg in updated_chat_history:
+                if isinstance(msg, HumanMessage):
+                    chat_history_dicts.append({"type": "human", "content": msg.content})
+                elif isinstance(msg, AIMessage):
+                    chat_history_dicts.append({"type": "ai", "content": msg.content})
+
             # Persist chat history in MongoDB
             await chat_sessions_collection.update_one(
                 {"user_id": user_id, "session_id": session_id},
-                {"$set": {"chat_history": [msg.dict() for msg in updated_chat_history]}},
+                {"$set": {"chat_history": chat_history_dicts}},
                 upsert=True
             )
 
@@ -76,10 +85,12 @@ class ChatController:
                 "session_id": session_id,
                 "question": message,
                 "answer": response_content,
-                "chat_history": [msg.dict() for msg in updated_chat_history]
+                "chat_history": chat_history_dicts
             }
         except Exception as e:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Error in send_chat_message for thread {thread_id}: {e}")
+            import traceback
+            traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Failed to process chat message: {e}")
 
     # Function to retrieve chat history for a specific session
