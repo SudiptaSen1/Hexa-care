@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Path
 from pydantic import BaseModel
 from typing import List, Dict, Any
 
-from controllers.chat_controller import chat_controller # Import the new controller
+from controllers.chat_controller import chat_controller
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ class ChatMessageResponse(BaseModel):
     session_id: str
     question: str
     answer: str
-    chat_history: List[Dict[str, Any]] # history will be a list of dicts from BaseMessage.dict()
+    chat_history: List[Dict[str, Any]]
 
 class ChatHistoryResponse(BaseModel):
     user_id: str
@@ -31,8 +31,7 @@ class UserSessionsResponse(BaseModel):
     user_id: str
     sessions: List[Dict[str, str]]
 
-
-@router.post("/sessions/start/{user_id}", response_model=StartChatResponse, summary="Start a new chat session for a user")
+@router.post("/sessions/start/{user_id}", response_model=StartChatResponse)
 async def start_new_chat(
     user_id: str = Path(..., description="The ID of the user starting the chat session")
 ):
@@ -44,7 +43,7 @@ async def start_new_chat(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start new chat session: {e}")
 
-@router.post("/sessions/{user_id}/{session_id}/message", response_model=ChatMessageResponse, summary="Send a message to a chat session")
+@router.post("/sessions/{user_id}/{session_id}/message", response_model=ChatMessageResponse)
 async def send_message_to_chat(
     chat_message: ChatMessageRequest,
     user_id: str = Path(..., description="The ID of the user"),
@@ -52,16 +51,15 @@ async def send_message_to_chat(
 ):
     """
     Sends a message to an ongoing chat session and retrieves the AI's response.
-    The chat history for this session is maintained persistently.
     """
     try:
         return await chat_controller.send_chat_message(user_id, session_id, chat_message.message)
     except HTTPException as e:
-        raise e # Re-raise HTTPExceptions from controller
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send message: {e}")
 
-@router.get("/history/{user_id}/{session_id}", response_model=ChatHistoryResponse, summary="Get chat history for a specific session")
+@router.get("/history/{user_id}/{session_id}", response_model=ChatHistoryResponse)
 async def get_session_history(
     user_id: str = Path(..., description="The ID of the user"),
     session_id: str = Path(..., description="The ID of the chat session")
@@ -76,7 +74,7 @@ async def get_session_history(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve chat history: {e}")
 
-@router.get("/sessions/{user_id}", response_model=UserSessionsResponse, summary="Get all chat sessions for a user")
+@router.get("/sessions/{user_id}", response_model=UserSessionsResponse)
 async def get_all_sessions_for_user(
     user_id: str = Path(..., description="The ID of the user")
 ):

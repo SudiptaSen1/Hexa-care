@@ -8,9 +8,10 @@ import {
   CardTitle,
 } from '../components/ui/card';
 import { ScrollArea } from '../components/ui/scroll-area';
-import { Bot, User, MessageSquare, Plus } from 'lucide-react';
-
-const API_BASE = 'http://localhost:8000';
+import { Bot, User, MessageSquare, Plus, Loader2 } from 'lucide-react';
+import { useAuth } from '../src/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { apiCall, API_ENDPOINTS } from '../src/config/api';
 
 const Chat = () => {
   const [input, setInput] = useState('');
@@ -18,36 +19,39 @@ const Chat = () => {
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const userId = 'user123'; // Replace with actual user ID from auth
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
-  // Load user sessions on component mount
   useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
     loadUserSessions();
-  }, []);
+  }, [isAuthenticated, navigate]);
 
   const loadUserSessions = async () => {
     try {
-      const response = await fetch(`${API_BASE}/sessions/${userId}`);
-      const data = await response.json();
-      if (response.ok) {
-        setSessions(data.sessions || []);
-      }
+      setLoadingSessions(true);
+      const response = await apiCall(`${API_ENDPOINTS.CHAT.GET_SESSIONS}/${user.user_id}`);
+      setSessions(response.sessions || []);
     } catch (error) {
       console.error('Error loading sessions:', error);
+    } finally {
+      setLoadingSessions(false);
     }
   };
 
   const startNewSession = async () => {
     try {
-      const response = await fetch(`${API_BASE}/sessions/start/${userId}`, {
+      const response = await apiCall(`${API_ENDPOINTS.CHAT.START_SESSION}/${user.user_id}`, {
         method: 'POST'
       });
-      const data = await response.json();
-      if (response.ok) {
-        setCurrentSessionId(data.session_id);
-        setMessages([]);
-        await loadUserSessions(); // Refresh sessions list
-      }
+      
+      setCurrentSessionId(response.session_id);
+      setMessages([]);
+      await loadUserSessions();
     } catch (error) {
       console.error('Error starting new session:', error);
     }
@@ -55,17 +59,16 @@ const Chat = () => {
 
   const loadChatHistory = async (sessionId) => {
     try {
-      const response = await fetch(`${API_BASE}/history/${userId}/${sessionId}`);
-      const data = await response.json();
-      if (response.ok) {
-        const formattedMessages = data.chat_history.map(msg => ({
-          sender: msg.type === 'human' ? 'user' : 'bot',
-          text: msg.content,
-          timestamp: new Date().toLocaleTimeString()
-        }));
-        setMessages(formattedMessages);
-        setCurrentSessionId(sessionId);
-      }
+      const response = await apiCall(`${API_ENDPOINTS.CHAT.GET_HISTORY}/${user.user_id}/${sessionId}`);
+      
+      const formattedMessages = response.chat_history.map(msg => ({
+        sender: msg.type === 'human' ? 'user' : 'bot',
+        text: msg.content,
+        timestamp: new Date().toLocaleTimeString()
+      }));
+      
+      setMessages(formattedMessages);
+      setCurrentSessionId(sessionId);
     } catch (error) {
       console.error('Error loading chat history:', error);
     }
@@ -86,40 +89,30 @@ const Chat = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput('');
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE}/sessions/${userId}/${currentSessionId}/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: input })
-      });
+      const response = await apiCall(
+        `${API_ENDPOINTS.CHAT.SEND_MESSAGE}/${user.user_id}/${currentSessionId}/message`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ message: currentInput })
+        }
+      );
 
-      const data = await response.json();
-      
-      if (response.ok) {
-        const botMessage = {
-          sender: 'bot',
-          text: data.answer,
-          timestamp: new Date().toLocaleTimeString(),
-        };
-        setMessages(prev => [...prev, botMessage]);
-      } else {
-        const errorMessage = {
-          sender: 'bot',
-          text: 'Sorry, I encountered an error processing your message.',
-          timestamp: new Date().toLocaleTimeString(),
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      }
+      const botMessage = {
+        sender: 'bot',
+        text: response.answer,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setMessages(prev => [...prev, botMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage = {
         sender: 'bot',
-        text: 'Sorry, I\'m having trouble connecting right now.',
+        text: 'Sorry, I encountered an error processing your message. Please try again.',
         timestamp: new Date().toLocaleTimeString(),
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -127,6 +120,10 @@ const Chat = () => {
       setIsLoading(false);
     }
   };
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className='flex h-[600px] max-w-6xl mx-auto p-4 gap-4'>
@@ -143,25 +140,31 @@ const Chat = () => {
         <CardContent className='flex-1 overflow-hidden'>
           <ScrollArea className='h-full'>
             <div className='space-y-2'>
-              {sessions.map((session) => (
-                <div
-                  key={session.session_id}
-                  className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                    currentSessionId === session.session_id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted hover:bg-muted/80'
-                  }`}
-                  onClick={() => loadChatHistory(session.session_id)}
-                >
-                  <div className="font-medium text-sm truncate">
-                    {session.session_name}
-                  </div>
-                  <div className="text-xs opacity-70">
-                    {new Date(session.created_at).toLocaleDateString()}
-                  </div>
+              {loadingSessions ? (
+                <div className="text-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                  <p className="text-sm text-muted-foreground mt-2">Loading sessions...</p>
                 </div>
-              ))}
-              {sessions.length === 0 && (
+              ) : sessions.length > 0 ? (
+                sessions.map((session) => (
+                  <div
+                    key={session.session_id}
+                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                      currentSessionId === session.session_id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted hover:bg-muted/80'
+                    }`}
+                    onClick={() => loadChatHistory(session.session_id)}
+                  >
+                    <div className="font-medium text-sm truncate">
+                      {session.session_name}
+                    </div>
+                    <div className="text-xs opacity-70">
+                      {new Date(session.created_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                ))
+              ) : (
                 <div className="text-center text-muted-foreground text-sm py-4">
                   No chat sessions yet. Start a new one!
                 </div>
@@ -218,20 +221,24 @@ const Chat = () => {
                   </div>
                 </div>
               ))}
+              
               {messages.length === 0 && !currentSessionId && (
                 <div className='text-center text-muted-foreground text-sm'>
                   Start a new session to begin chatting about your medical records.
                 </div>
               )}
+              
               {messages.length === 0 && currentSessionId && (
                 <div className='text-center text-muted-foreground text-sm'>
                   Ask me anything about your uploaded prescriptions and medical history.
                 </div>
               )}
+              
               {isLoading && (
                 <div className="flex gap-2 items-start max-w-xs">
                   <Bot className='w-5 h-5 text-muted-foreground mt-1' />
-                  <div className="bg-muted text-muted-foreground rounded-xl px-4 py-2 text-sm">
+                  <div className="bg-muted text-muted-foreground rounded-xl px-4 py-2 text-sm flex items-center gap-2">
+                    <Loader2 className="h-3 w-3 animate-spin" />
                     Thinking...
                   </div>
                 </div>
@@ -258,7 +265,7 @@ const Chat = () => {
               type='submit' 
               disabled={isLoading || !currentSessionId || !input.trim()}
             >
-              Send
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send'}
             </Button>
           </form>
         </div>

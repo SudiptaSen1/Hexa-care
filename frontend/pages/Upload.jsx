@@ -3,17 +3,21 @@ import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { UploadCloud, FileText, CheckCircle, AlertCircle } from 'lucide-react';
-
-const API_BASE = 'http://localhost:8000';
+import { UploadCloud, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { useAuth } from '../src/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { apiCall, API_ENDPOINTS, API_BASE } from '../src/config/api';
 
 const Upload = () => {
   const fileInputRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  
   const [userSchedule, setUserSchedule] = useState({
-    patient_name: '',
+    patient_name: user?.username || '',
     contact_number: '',
     wake_up_time: '07:00',
     breakfast_time: '08:00',
@@ -21,6 +25,21 @@ const Upload = () => {
     dinner_time: '20:00',
     sleep_time: '22:00'
   });
+
+  React.useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login');
+    }
+  }, [isAuthenticated, navigate]);
+
+  React.useEffect(() => {
+    if (user?.username) {
+      setUserSchedule(prev => ({
+        ...prev,
+        patient_name: user.username
+      }));
+    }
+  }, [user]);
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -62,14 +81,15 @@ const Upload = () => {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('user_id', 'user123'); // Replace with actual user ID from auth
+      formData.append('user_id', user.user_id);
       formData.append('user_schedule_json', JSON.stringify(userSchedule));
 
-      const response = await fetch(`${API_BASE}/upload-prescription`, {
+      const response = await fetch(`${API_BASE}${API_ENDPOINTS.PRESCRIPTIONS.UPLOAD}`, {
         method: 'POST',
         body: formData,
         headers: {
-          'X-User-ID': 'user123' // Replace with actual user ID from auth
+          'ngrok-skip-browser-warning': 'true',
+          'X-User-ID': user.user_id
         }
       });
 
@@ -96,6 +116,10 @@ const Upload = () => {
     }
   };
 
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="flex justify-center items-start mt-10 px-4">
       <div className="w-full max-w-2xl space-y-6">
@@ -118,8 +142,13 @@ const Upload = () => {
                 onChange={handleFileChange}
                 className="hidden"
               />
-              <Button variant="outline" onClick={handleUploadClick} className="w-full">
-                Choose File
+              <Button 
+                variant="outline" 
+                onClick={handleUploadClick} 
+                className="w-full"
+                disabled={isUploading}
+              >
+                {selectedFile ? 'Change File' : 'Choose File'}
               </Button>
               {selectedFile && (
                 <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
@@ -146,6 +175,7 @@ const Upload = () => {
                   onChange={(e) => handleScheduleChange('patient_name', e.target.value)}
                   placeholder="Enter patient name"
                   required
+                  disabled={isUploading}
                 />
               </div>
               <div className="space-y-2">
@@ -156,6 +186,7 @@ const Upload = () => {
                   onChange={(e) => handleScheduleChange('contact_number', e.target.value)}
                   placeholder="+1234567890"
                   required
+                  disabled={isUploading}
                 />
               </div>
             </div>
@@ -168,6 +199,7 @@ const Upload = () => {
                   type="time"
                   value={userSchedule.wake_up_time}
                   onChange={(e) => handleScheduleChange('wake_up_time', e.target.value)}
+                  disabled={isUploading}
                 />
               </div>
               <div className="space-y-2">
@@ -177,6 +209,7 @@ const Upload = () => {
                   type="time"
                   value={userSchedule.breakfast_time}
                   onChange={(e) => handleScheduleChange('breakfast_time', e.target.value)}
+                  disabled={isUploading}
                 />
               </div>
               <div className="space-y-2">
@@ -186,6 +219,7 @@ const Upload = () => {
                   type="time"
                   value={userSchedule.lunch_time}
                   onChange={(e) => handleScheduleChange('lunch_time', e.target.value)}
+                  disabled={isUploading}
                 />
               </div>
               <div className="space-y-2">
@@ -195,6 +229,7 @@ const Upload = () => {
                   type="time"
                   value={userSchedule.dinner_time}
                   onChange={(e) => handleScheduleChange('dinner_time', e.target.value)}
+                  disabled={isUploading}
                 />
               </div>
               <div className="space-y-2">
@@ -204,6 +239,7 @@ const Upload = () => {
                   type="time"
                   value={userSchedule.sleep_time}
                   onChange={(e) => handleScheduleChange('sleep_time', e.target.value)}
+                  disabled={isUploading}
                 />
               </div>
             </div>
@@ -213,7 +249,14 @@ const Upload = () => {
               className="w-full" 
               disabled={isUploading || !selectedFile}
             >
-              {isUploading ? 'Processing...' : 'Upload & Process Prescription'}
+              {isUploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                'Upload & Process Prescription'
+              )}
             </Button>
           </CardContent>
         </Card>
@@ -251,10 +294,18 @@ const Upload = () => {
                     <div>
                       <h4 className="font-semibold mb-2">Extracted Information:</h4>
                       <div className="bg-gray-50 p-4 rounded-lg">
-                        <pre className="text-xs overflow-auto">{JSON.stringify(uploadResult.data.extracted_json, null, 2)}</pre>
+                        <pre className="text-xs overflow-auto max-h-64">{JSON.stringify(uploadResult.data.extracted_json, null, 2)}</pre>
                       </div>
                     </div>
                   )}
+                  <div className="flex gap-2">
+                    <Button onClick={() => navigate('/chat')} size="sm">
+                      Chat About This Prescription
+                    </Button>
+                    <Button onClick={() => navigate('/dashboard')} variant="outline" size="sm">
+                      Back to Dashboard
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="bg-red-50 p-4 rounded-lg">
