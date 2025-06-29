@@ -301,7 +301,7 @@ async def get_recent_confirmations(patient_name: str, limit: int = 10, user_id: 
 
 async def get_medication_status(patient_name: str, user_id: str = None):
     """
-    Get current medication status overview for a patient
+    Get current medication status overview for a patient including pending medications
     """
     try:
         # Get today's medication logs
@@ -335,6 +335,63 @@ async def get_medication_status(patient_name: str, user_id: str = None):
                 log_dict["user_id"] = log["user_id"]
             today_logs.append(log_dict)
         
+        # Also get upcoming medications for today that haven't been sent yet
+        current_time = datetime.now()
+        current_hour_minute = current_time.strftime("%H:%M")
+        
+        # Find active medications that have times scheduled for today but haven't been logged yet
+        active_meds_query = {
+            "patient_name": {"$regex": f"^{re.escape(patient_name)}$", "$options": "i"},
+            "start_date": {"$lte": current_time}
+        }
+        if user_id:
+            active_meds_query["user_id"] = user_id
+        
+        # Get active medications and check for pending times
+        pending_medications = []
+        async for medication in medications_collection.find(active_meds_query):
+            # Check if medication is still active
+            start_date = medication["start_date"]
+            duration_days = medication["duration_days"]
+            end_date = start_date + timedelta(days=duration_days)
+            
+            if current_time <= end_date:
+                # Check each scheduled time for today
+                for scheduled_time in medication.get("times", []):
+                    # Check if this time hasn't been logged today
+                    existing_log = await medication_logs_collection.find_one({
+                        "medication_id": str(medication["_id"]),
+                        "scheduled_time": scheduled_time,
+                        "sent_time": {"$gte": today, "$lt": tomorrow}
+                    })
+                    
+                    if not existing_log:
+                        # This is a pending medication for today
+                        pending_medications.append({
+                            "medication_id": str(medication["_id"]),
+                            "medication_name": medication.get("name", ""),
+                            "scheduled_time": scheduled_time,
+                            "status": "pending"
+                        })
+        
+        # Add pending medications to today's logs
+        for pending in pending_medications:
+            today_logs.append({
+                "_id": f"pending_{pending['medication_id']}_{pending['scheduled_time']}",
+                "medication_id": pending["medication_id"],
+                "patient_name": patient_name,
+                "contact_number": "",
+                "scheduled_time": pending["scheduled_time"],
+                "sent_time": None,
+                "status": "pending",
+                "response_received": False,
+                "response_time": None,
+                "response_message": ""
+            })
+        
+        # Sort by scheduled time
+        today_logs.sort(key=lambda x: x["scheduled_time"])
+        
         taken_today = len([log for log in today_logs if log["status"] == "taken"])
         missed_today = len([log for log in today_logs if log["status"] == "missed"])
         pending_today = len([log for log in today_logs if log["status"] == "pending"])
@@ -357,3 +414,72 @@ async def get_medication_status(patient_name: str, user_id: str = None):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error getting medication status: {str(e)}")
+
+async def create_test_medication_logs(patient_name: str, user_id: str = None):
+    """
+    Create test medication logs for demonstration purposes
+    """
+    try:
+        current_time = datetime.now()
+        today = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Create some test logs for today
+        test_logs = [
+            {
+                "medication_id": "test_med_1",
+                "patient_name": patient_name,
+                "contact_number": "+1234567890",
+                "scheduled_time": "08:00",
+                "sent_time": today + timedelta(hours=8),
+                "status": "taken",
+                "response_received": True,
+                "response_time": today + timedelta(hours=8, minutes=15),
+                "response_message": "yes"
+            },
+            {
+                "medication_id": "test_med_2",
+                "patient_name": patient_name,
+                "contact_number": "+1234567890",
+                "scheduled_time": "12:00",
+                "sent_time": today + timedelta(hours=12),
+                "status": "missed",
+                "response_received": True,
+                "response_time": today + timedelta(hours=12, minutes=30),
+                "response_message": "no"
+            },
+            {
+                "medication_id": "test_med_3",
+                "patient_name": patient_name,
+                "contact_number": "+1234567890",
+                "scheduled_time": "18:00",
+                "sent_time": today + timedelta(hours=18),
+                "status": "pending",
+                "response_received": False
+            },
+            {
+                "medication_id": "test_med_4",
+                "patient_name": patient_name,
+                "contact_number": "+1234567890",
+                "scheduled_time": "22:00",
+                "sent_time": None,
+                "status": "pending",
+                "response_received": False
+            }
+        ]
+        
+        # Add user_id if provided
+        if user_id:
+            for log in test_logs:
+                log["user_id"] = user_id
+        
+        # Insert test logs
+        await medication_logs_collection.insert_many(test_logs)
+        
+        return {
+            "status": "success",
+            "message": f"Created {len(test_logs)} test medication logs for {patient_name}"
+        }
+        
+    except Exception as e:
+        print(f"Error creating test logs: {e}")
+        return {"status": "error", "message": str(e)}

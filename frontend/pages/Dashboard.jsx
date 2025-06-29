@@ -21,7 +21,9 @@ import {
   Calendar,
   TrendingUp,
   Eye,
-  BarChart3
+  BarChart3,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 
 export const Dashboard = () => {
@@ -179,7 +181,7 @@ export const Dashboard = () => {
     },
     {
       title: "Today's Taken",
-      value: dashboardData.medicationStatus?.today_summary?.taken || '0',
+      value: dashboardData.medicationStatus?.today_summary?.taken?.toString() || '0',
       change: `${dashboardData.medicationStatus?.today_summary?.total || 0} total today`,
       icon: CheckCircle,
       color: 'text-rose-600',
@@ -188,7 +190,7 @@ export const Dashboard = () => {
   ];
 
   return (
-    <div className="space-y-8 px-4 md:px-10 py-5">
+    <div className="space-y-8 px-4 md:px-10 py-5 bg-background min-h-screen">
       {/* Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
@@ -204,6 +206,10 @@ export const Dashboard = () => {
             <MessageSquare className="mr-2 h-4 w-4" />
             AI Assistant
           </Button>
+          <Button onClick={loadDashboardData} variant="outline" size="sm" disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
         </div>
       </div>
 
@@ -211,7 +217,10 @@ export const Dashboard = () => {
       {error && (
         <Card className="border-red-200 bg-red-50 dark:bg-red-900/20">
           <CardContent className="pt-6">
-            <p className="text-red-700 dark:text-red-200">{error}</p>
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <p className="text-red-700 dark:text-red-200">{error}</p>
+            </div>
             <Button onClick={loadDashboardData} variant="outline" size="sm" className="mt-2">
               Retry
             </Button>
@@ -224,15 +233,15 @@ export const Dashboard = () => {
         {stats.map((stat, index) => (
           <Card 
             key={index} 
-            className="hover:shadow-lg transition-shadow duration-200 cursor-pointer"
+            className="hover:shadow-lg transition-all duration-200 cursor-pointer hover:scale-105 bg-card border-border"
             onClick={stat.onClick}
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-foreground">{stat.title}</CardTitle>
+              <CardTitle className="text-sm font-medium text-card-foreground">{stat.title}</CardTitle>
               <stat.icon className={`h-4 w-4 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-foreground">{stat.value}</div>
+              <div className="text-2xl font-bold text-card-foreground">{stat.value}</div>
               <p className="text-xs text-muted-foreground">{stat.change}</p>
             </CardContent>
           </Card>
@@ -247,10 +256,10 @@ export const Dashboard = () => {
           {/* Upload Prescription */}
           <Card
             onClick={() => navigate('/upload')}
-            className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105 bg-card border-border"
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-lg font-medium text-foreground">Upload Prescription</CardTitle>
+              <CardTitle className="text-lg font-medium text-card-foreground">Upload Prescription</CardTitle>
               <Upload className="h-5 w-5 text-primary" />
             </CardHeader>
             <CardContent>
@@ -263,10 +272,10 @@ export const Dashboard = () => {
           {/* AI Chat */}
           <Card
             onClick={() => navigate('/chat')}
-            className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105 bg-card border-border"
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-lg font-medium text-foreground">AI Health Assistant</CardTitle>
+              <CardTitle className="text-lg font-medium text-card-foreground">AI Health Assistant</CardTitle>
               <Brain className="h-5 w-5 text-primary" />
             </CardHeader>
             <CardContent>
@@ -279,10 +288,10 @@ export const Dashboard = () => {
           {/* Medication Tracking */}
           <Card
             onClick={() => navigate('/medication-tracking')}
-            className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
+            className="cursor-pointer hover:shadow-lg transition-all duration-200 hover:scale-105 bg-card border-border"
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-lg font-medium text-foreground">Medication Tracking</CardTitle>
+              <CardTitle className="text-lg font-medium text-card-foreground">Medication Tracking</CardTitle>
               <Activity className="h-5 w-5 text-primary" />
             </CardHeader>
             <CardContent>
@@ -297,9 +306,9 @@ export const Dashboard = () => {
       {/* Recent Activity */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* Recent Prescriptions */}
-        <Card>
+        <Card className="bg-card border-border">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-foreground">
+            <CardTitle className="flex items-center gap-2 text-card-foreground">
               <FileHeart className="h-5 w-5" />
               Recent Prescriptions
             </CardTitle>
@@ -316,7 +325,7 @@ export const Dashboard = () => {
                     onClick={() => handleViewPrescription(prescription)}
                   >
                     <div className="flex-1">
-                      <div className="font-medium text-foreground">
+                      <div className="font-medium text-card-foreground">
                         {prescription.patient_name || 'Unknown Patient'}
                       </div>
                       <div className="text-sm text-muted-foreground">
@@ -360,9 +369,9 @@ export const Dashboard = () => {
         </Card>
 
         {/* Today's Medication Status */}
-        <Card>
+        <Card className="bg-card border-border">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-foreground">
+            <CardTitle className="flex items-center gap-2 text-card-foreground">
               <Calendar className="h-5 w-5" />
               Today's Medications
             </CardTitle>
@@ -374,7 +383,7 @@ export const Dashboard = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div 
-                    className="cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/20 p-2 rounded-lg transition-colors"
+                    className="cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/20 p-3 rounded-lg transition-colors"
                     onClick={handleViewMedicationDetails}
                   >
                     <div className="text-2xl font-bold text-green-600">
@@ -383,7 +392,7 @@ export const Dashboard = () => {
                     <div className="text-xs text-muted-foreground">Taken</div>
                   </div>
                   <div 
-                    className="cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-lg transition-colors"
+                    className="cursor-pointer hover:bg-red-50 dark:hover:bg-red-900/20 p-3 rounded-lg transition-colors"
                     onClick={handleViewMedicationDetails}
                   >
                     <div className="text-2xl font-bold text-red-600">
@@ -392,7 +401,7 @@ export const Dashboard = () => {
                     <div className="text-xs text-muted-foreground">Missed</div>
                   </div>
                   <div 
-                    className="cursor-pointer hover:bg-yellow-50 dark:hover:bg-yellow-900/20 p-2 rounded-lg transition-colors"
+                    className="cursor-pointer hover:bg-yellow-50 dark:hover:bg-yellow-900/20 p-3 rounded-lg transition-colors"
                     onClick={handleViewMedicationDetails}
                   >
                     <div className="text-2xl font-bold text-yellow-600">
@@ -405,11 +414,11 @@ export const Dashboard = () => {
                 {/* Today's Medication List */}
                 {dashboardData.medicationStatus.today_logs && dashboardData.medicationStatus.today_logs.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-sm text-foreground">Today's Schedule</h4>
+                    <h4 className="font-semibold text-sm text-card-foreground">Today's Schedule</h4>
                     <div className="space-y-1 max-h-32 overflow-y-auto">
-                      {dashboardData.medicationStatus.today_logs.slice(0, 3).map((log, index) => (
+                      {dashboardData.medicationStatus.today_logs.slice(0, 5).map((log, index) => (
                         <div key={index} className="flex items-center justify-between text-xs p-2 bg-muted/50 rounded">
-                          <span className="text-foreground">{log.scheduled_time}</span>
+                          <span className="text-card-foreground font-medium">{log.scheduled_time}</span>
                           <Badge 
                             variant={log.status === 'taken' ? 'default' : log.status === 'missed' ? 'destructive' : 'secondary'}
                             className="text-xs"
@@ -418,6 +427,11 @@ export const Dashboard = () => {
                           </Badge>
                         </div>
                       ))}
+                      {dashboardData.medicationStatus.today_logs.length > 5 && (
+                        <div className="text-xs text-muted-foreground text-center pt-1">
+                          +{dashboardData.medicationStatus.today_logs.length - 5} more
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -447,9 +461,9 @@ export const Dashboard = () => {
 
       {/* Active Medications Overview */}
       {dashboardData.activeMedications.length > 0 && (
-        <Card>
+        <Card className="bg-card border-border">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-foreground">
+            <CardTitle className="flex items-center gap-2 text-card-foreground">
               <Syringe className="h-5 w-5" />
               Active Medications ({dashboardData.activeMedications.length})
             </CardTitle>
@@ -462,7 +476,7 @@ export const Dashboard = () => {
                   className="p-3 bg-muted rounded-lg hover:bg-muted/80 cursor-pointer transition-colors"
                   onClick={() => navigate('/medication-tracking')}
                 >
-                  <div className="font-medium text-foreground text-sm">{medication.name}</div>
+                  <div className="font-medium text-card-foreground text-sm">{medication.name}</div>
                   <div className="text-xs text-muted-foreground">
                     {medication.dosage}
                   </div>

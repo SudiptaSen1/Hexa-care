@@ -3,7 +3,8 @@ from controllers.medication_controller import (
     process_medication_response, 
     get_medication_adherence, 
     get_recent_confirmations,
-    get_medication_status
+    get_medication_status,
+    create_test_medication_logs
 )
 
 router = APIRouter()
@@ -50,3 +51,13 @@ async def get_medication_status_endpoint(
     Get current medication status overview for a patient
     """
     return await get_medication_status(patient_name, user_id)
+
+@router.post("/create-test-logs/{patient_name}")
+async def create_test_logs(
+    patient_name: str,
+    user_id: str = Header(None, alias="X-User-ID")
+):
+    """
+    Create test medication logs for demonstration purposes
+    """
+    return await create_test_medication_logs(patient_name, user_id)
