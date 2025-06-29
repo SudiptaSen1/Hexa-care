@@ -37,9 +37,38 @@ class ChatController:
         try:
             # Get user's prescription data for context
             prescriptions_collection = db["prescriptions"]
+            medications_collection = db["medications"]
+            medication_logs_collection = db["medication_logs"]
+            
+            # Get user's prescriptions
             user_prescriptions = []
             async for prescription in prescriptions_collection.find({"user_id": user_id}):
                 user_prescriptions.append(prescription)
+
+            # Get user's active medications
+            current_date = datetime.now()
+            active_medications = []
+            async for medication in medications_collection.find({
+                "user_id": user_id,
+                "start_date": {"$lte": current_date}
+            }):
+                # Check if medication is still active
+                start_date = medication["start_date"]
+                duration_days = medication["duration_days"]
+                end_date = start_date + timedelta(days=duration_days)
+                
+                if current_date <= end_date:
+                    active_medications.append(medication)
+
+            # Get recent medication logs
+            from datetime import timedelta
+            week_ago = current_date - timedelta(days=7)
+            recent_logs = []
+            async for log in medication_logs_collection.find({
+                "user_id": user_id,
+                "sent_time": {"$gte": week_ago}
+            }).sort("sent_time", -1).limit(20):
+                recent_logs.append(log)
 
             # Retrieve existing chat history
             chat_sessions_collection = db["chat_sessions"]
@@ -49,8 +78,8 @@ class ChatController:
             if existing_session and "chat_history" in existing_session:
                 chat_history = existing_session["chat_history"]
 
-            # Build context from user's prescriptions
-            context = self._build_prescription_context(user_prescriptions)
+            # Build comprehensive context
+            context = self._build_comprehensive_context(user_prescriptions, active_medications, recent_logs)
             
             # Build chat history string
             chat_history_str = ""
@@ -58,10 +87,12 @@ class ChatController:
                 chat_history_str += f"{msg['type']}: {msg['content']}\n"
 
             # Create prompt for Gemini
-            prompt = f"""You are a helpful medical assistant. You have access to the user's prescription information below. 
-Use this information to answer their questions about medications, dosages, treatments, and health advice.
+            prompt = f"""You are a helpful medical assistant with access to the user's complete medical information. 
+You can answer questions about their medications, prescriptions, adherence, schedules, and provide health guidance.
 
-User's Prescription Information:
+IMPORTANT: Always base your responses on the actual data provided below. Be specific and reference the actual medications, times, and status when relevant.
+
+User's Medical Information:
 {context}
 
 Chat History:
@@ -69,7 +100,7 @@ Chat History:
 
 User Question: {message}
 
-Please provide a helpful, accurate response based on the prescription information available. If the question cannot be answered from the prescription data, politely explain that and suggest consulting with a healthcare provider."""
+Please provide a helpful, accurate response based on the medical information available. Include specific details from their prescriptions and medication history when relevant. If you need more information, ask specific questions. Always remind users to consult healthcare providers for medical decisions."""
 
             # Generate response using Gemini
             response = gemini_model.generate_content(prompt)
@@ -104,37 +135,79 @@ Please provide a helpful, accurate response based on the prescription informatio
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Failed to process chat message: {e}")
 
-    def _build_prescription_context(self, prescriptions: List[Dict]) -> str:
-        """Build context string from user's prescriptions"""
-        if not prescriptions:
-            return "No prescription information available."
-        
+    def _build_comprehensive_context(self, prescriptions: List[Dict], medications: List[Dict], logs: List[Dict]) -> str:
+        """Build comprehensive context string from all user's medical data"""
         context_parts = []
-        for i, prescription in enumerate(prescriptions, 1):
-            context_parts.append(f"Prescription {i}:")
-            context_parts.append(f"  Patient: {prescription.get('patient_name', 'Unknown')}")
-            context_parts.append(f"  Date: {prescription.get('date', 'Unknown')}")
-            context_parts.append(f"  Diagnosis: {prescription.get('diagnosis', 'Not specified')}")
-            
-            medicines = prescription.get('medicines', [])
-            if medicines:
-                context_parts.append("  Medications:")
-                for med in medicines:
-                    med_info = f"    - {med.get('name', 'Unknown')}: {med.get('dosage', 'Unknown dosage')}"
-                    if med.get('duration'):
-                        med_info += f" for {med['duration']}"
-                    if med.get('notes'):
-                        med_info += f" ({med['notes']})"
-                    context_parts.append(med_info)
-            
-            instructions = prescription.get('doctor_instructions', [])
-            if instructions:
-                context_parts.append("  Doctor's Instructions:")
-                for instruction in instructions:
-                    context_parts.append(f"    - {instruction}")
-            
-            context_parts.append("")  # Empty line between prescriptions
         
+        # Prescriptions section
+        if prescriptions:
+            context_parts.append("=== PRESCRIPTIONS ===")
+            for i, prescription in enumerate(prescriptions, 1):
+                parsed_data = prescription.get('parsed_data', {})
+                context_parts.append(f"Prescription {i} (Uploaded: {prescription.get('upload_date', 'Unknown').strftime('%Y-%m-%d') if prescription.get('upload_date') else 'Unknown'}):")
+                context_parts.append(f"  Patient: {parsed_data.get('patient_name', prescription.get('patient_name', 'Unknown'))}")
+                context_parts.append(f"  Date: {parsed_data.get('date', 'Unknown')}")
+                context_parts.append(f"  Diagnosis: {parsed_data.get('diagnosis', 'Not specified')}")
+                
+                medicines = parsed_data.get('medicines', [])
+                if medicines:
+                    context_parts.append("  Medications:")
+                    for med in medicines:
+                        med_info = f"    - {med.get('name', 'Unknown')}: {med.get('dosage', 'Unknown dosage')}"
+                        if med.get('duration'):
+                            med_info += f" for {med['duration']}"
+                        if med.get('notes'):
+                            med_info += f" ({med['notes']})"
+                        context_parts.append(med_info)
+                
+                instructions = parsed_data.get('doctor_instructions', [])
+                if instructions:
+                    context_parts.append("  Doctor's Instructions:")
+                    for instruction in instructions:
+                        context_parts.append(f"    - {instruction}")
+                
+                context_parts.append("")
+        else:
+            context_parts.append("=== PRESCRIPTIONS ===")
+            context_parts.append("No prescriptions uploaded yet.")
+            context_parts.append("")
+
+        # Active medications section
+        if medications:
+            context_parts.append("=== ACTIVE MEDICATIONS ===")
+            for i, medication in enumerate(medications, 1):
+                context_parts.append(f"Medication {i}:")
+                context_parts.append(f"  Name: {medication.get('name', 'Unknown')}")
+                context_parts.append(f"  Dosage: {medication.get('dosage', 'Unknown')}")
+                context_parts.append(f"  Times: {', '.join(medication.get('times', []))}")
+                context_parts.append(f"  Duration: {medication.get('duration_days', 0)} days")
+                context_parts.append(f"  Started: {medication.get('start_date', 'Unknown').strftime('%Y-%m-%d') if medication.get('start_date') else 'Unknown'}")
+                if medication.get('message'):
+                    context_parts.append(f"  Reminder Message: {medication['message']}")
+                context_parts.append("")
+        else:
+            context_parts.append("=== ACTIVE MEDICATIONS ===")
+            context_parts.append("No active medications scheduled.")
+            context_parts.append("")
+
+        # Recent medication logs section
+        if logs:
+            context_parts.append("=== RECENT MEDICATION HISTORY (Last 7 days) ===")
+            for i, log in enumerate(logs, 1):
+                context_parts.append(f"Log {i}:")
+                context_parts.append(f"  Time: {log.get('scheduled_time', 'Unknown')}")
+                context_parts.append(f"  Status: {log.get('status', 'Unknown')}")
+                context_parts.append(f"  Sent: {log.get('sent_time', 'Unknown').strftime('%Y-%m-%d %H:%M') if log.get('sent_time') else 'Unknown'}")
+                if log.get('response_message'):
+                    context_parts.append(f"  Response: {log['response_message']}")
+                if log.get('response_time'):
+                    context_parts.append(f"  Responded at: {log['response_time'].strftime('%Y-%m-%d %H:%M') if log.get('response_time') else 'Unknown'}")
+                context_parts.append("")
+        else:
+            context_parts.append("=== RECENT MEDICATION HISTORY ===")
+            context_parts.append("No recent medication logs available.")
+            context_parts.append("")
+
         return "\n".join(context_parts)
 
     async def get_chat_history(self, user_id: str, session_id: str) -> Dict[str, Any]:
