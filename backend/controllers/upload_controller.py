@@ -122,8 +122,9 @@ async def upload_prescription_and_process(file_bytes: bytes, file_ext: str, user
 
         # Validate that the output is valid JSON before proceeding
         try:
-            json.loads(extracted_json_str)
-        except json.JSONDecodeError:
+            extracted_data = json.loads(extracted_json_str)
+            logger.info(f"Successfully parsed JSON for user_id: {user_id}")
+        except json.JSONDecodeError as e:
             logger.error(f"AI extraction failed to produce valid JSON for user_id: {user_id}. Output: {extracted_json_str}")
             raise HTTPException(status_code=500, detail="The AI model could not structure the extracted data correctly. Please try a clearer image.")
 
@@ -155,7 +156,7 @@ async def upload_prescription_and_process(file_bytes: bytes, file_ext: str, user
                 "url": "N/A",
                 "public_id": user_id,
                 "resource_type": "image",
-                "extracted_json": json.loads(extracted_json_str),
+                "extracted_json": extracted_data,
                 "summary": user_summary,
                 "error": None
             }

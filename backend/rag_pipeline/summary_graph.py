@@ -25,6 +25,7 @@ from langgraph.graph import StateGraph, END
 
 # Pydantic for data models
 from pydantic import BaseModel, Field, ValidationError
+import json
 
 # --- Configuration ---
 # Retrieve API key from environment variables
@@ -104,8 +105,16 @@ async def validate_and_parse_prescription(state: PrescriptionIngestionState) -> 
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Validating and parsing prescription record.")
     prescription_json_str = state["prescription_text"]
     try:
-        parsed_data = PatientPrescriptionRecord.model_validate_json(prescription_json_str)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Prescription parsed successfully.")
+        # First try to parse as JSON
+        try:
+            prescription_data = json.loads(prescription_json_str)
+        except json.JSONDecodeError:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Invalid JSON, treating as raw text")
+            return {"ingestion_status": "parsing_failed: Invalid JSON format"}
+        
+        # Validate with Pydantic
+        parsed_data = PatientPrescriptionRecord.model_validate(prescription_data)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Prescription parsed successfully for patient: {parsed_data.patient_name}")
         return {"parsed_prescription": parsed_data, "ingestion_status": "parsed"}
     except ValidationError as e:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Error parsing prescription (Pydantic validation): {e}")
@@ -118,57 +127,125 @@ async def store_prescription_data(state: PrescriptionIngestionState) -> Prescrip
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Storing prescription for user.")
     parsed_prescription = state["parsed_prescription"]
     user_id = state["user_id"]
+    
     if not parsed_prescription:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] No parsed prescription to store. Skipping storage.")
         return {"ingestion_status": "no_parsed_data"}
 
     try:
-        prescription_doc_content = (
-            f"Patient: {parsed_prescription.patient_name} (Age: {parsed_prescription.age}). "
-            f"Record Date: {parsed_prescription.date}. "
-            f"Diagnosis: {parsed_prescription.diagnosis or 'N/A'}. "
-            f"Doctor's Instructions: {', '.join(parsed_prescription.doctor_instructions)}. "
-            "Medications: "
-        )
-        for med in parsed_prescription.medicines:
-            prescription_doc_content += f"{med.name} {med.dosage} (Duration: {med.duration or 'N/A'}); "
+        documents_to_add = []
         
-        medicine_docs = []
+        # Create comprehensive prescription summary document
+        prescription_summary = (
+            f"Patient: {parsed_prescription.patient_name} (Age: {parsed_prescription.age}). "
+            f"Prescription Date: {parsed_prescription.date}. "
+            f"Diagnosis: {parsed_prescription.diagnosis or 'Not specified'}. "
+            f"Doctor Instructions: {'; '.join(parsed_prescription.doctor_instructions) if parsed_prescription.doctor_instructions else 'None'}. "
+        )
+        
+        # Add medication information to summary
+        medication_info = []
         for med in parsed_prescription.medicines:
-            medicine_docs.append(Document(
-                page_content=f"Patient: {parsed_prescription.patient_name}. Medication: {med.name}. Dosage: {med.dosage}. Duration: {med.duration or 'N/A'}. Notes: {med.notes or 'None'}.",
-                metadata={
-                    "type": "medicine_detail",
-                    "patient_name": parsed_prescription.patient_name,
-                    "date": parsed_prescription.date,
-                    "user_id": user_id,
-                    "medicine_name": med.name
-                }
-            ))
-
-        medication_names_str = ", ".join([m.name for m in parsed_prescription.medicines])
-
+            med_text = f"{med.name} - Dosage: {med.dosage}"
+            if med.duration:
+                med_text += f", Duration: {med.duration}"
+            if med.notes:
+                med_text += f", Notes: {med.notes}"
+            medication_info.append(med_text)
+        
+        if medication_info:
+            prescription_summary += f"Medications prescribed: {'; '.join(medication_info)}."
+        
+        # Create main prescription document
         summary_doc = Document(
-            page_content=prescription_doc_content,
+            page_content=prescription_summary,
             metadata={
                 "type": "prescription_summary",
                 "patient_name": parsed_prescription.patient_name,
+                "user_id": user_id,
                 "date_issued": parsed_prescription.date,
-                "medications": medication_names_str,
-                "diagnosis_summary": parsed_prescription.diagnosis,
-                "user_id": user_id
+                "diagnosis": parsed_prescription.diagnosis,
+                "medication_count": len(parsed_prescription.medicines),
+                "medications": [med.name for med in parsed_prescription.medicines]
             }
         )
+        documents_to_add.append(summary_doc)
         
-        documents_to_add = [summary_doc] + medicine_docs
+        # Create individual medication documents for detailed queries
+        for i, med in enumerate(parsed_prescription.medicines):
+            med_content = (
+                f"Patient {parsed_prescription.patient_name} has been prescribed {med.name}. "
+                f"Dosage: {med.dosage}. "
+                f"Duration: {med.duration or 'Not specified'}. "
+                f"Additional notes: {med.notes or 'None'}. "
+                f"This medication is part of treatment for: {parsed_prescription.diagnosis}."
+            )
+            
+            med_doc = Document(
+                page_content=med_content,
+                metadata={
+                    "type": "medication_detail",
+                    "patient_name": parsed_prescription.patient_name,
+                    "user_id": user_id,
+                    "medication_name": med.name,
+                    "medication_dosage": med.dosage,
+                    "medication_duration": med.duration,
+                    "prescription_date": parsed_prescription.date,
+                    "diagnosis": parsed_prescription.diagnosis
+                }
+            )
+            documents_to_add.append(med_doc)
         
-        # Add documents to Qdrant with proper metadata filtering
+        # Create diagnosis-specific document
+        if parsed_prescription.diagnosis:
+            diagnosis_content = (
+                f"Patient {parsed_prescription.patient_name} has been diagnosed with: {parsed_prescription.diagnosis}. "
+                f"Treatment includes the following medications: {', '.join([med.name for med in parsed_prescription.medicines])}. "
+                f"Doctor's instructions: {'; '.join(parsed_prescription.doctor_instructions) if parsed_prescription.doctor_instructions else 'None provided'}."
+            )
+            
+            diagnosis_doc = Document(
+                page_content=diagnosis_content,
+                metadata={
+                    "type": "diagnosis_info",
+                    "patient_name": parsed_prescription.patient_name,
+                    "user_id": user_id,
+                    "diagnosis": parsed_prescription.diagnosis,
+                    "prescription_date": parsed_prescription.date
+                }
+            )
+            documents_to_add.append(diagnosis_doc)
+        
+        # Add all documents to vector store
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Adding {len(documents_to_add)} documents to Qdrant...")
         vector_store.add_documents(documents_to_add)
         
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Prescription data stored in Qdrant. Added {len(documents_to_add)} documents.")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Successfully stored {len(documents_to_add)} documents in Qdrant for user {user_id}")
+        
+        # Verify storage by doing a quick search
+        try:
+            test_results = vector_store.similarity_search(
+                f"medications for {parsed_prescription.patient_name}",
+                k=1,
+                filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="metadata.user_id",
+                            match=models.MatchValue(value=user_id)
+                        )
+                    ]
+                )
+            )
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Verification search returned {len(test_results)} results")
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Verification search failed: {e}")
+        
         return {"ingestion_status": "completed"}
+        
     except Exception as e:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Error storing prescription data: {e}")
+        import traceback
+        traceback.print_exc()
         return {"ingestion_status": f"storage_failed: {e}"}
 
 async def generate_user_summary(state: PrescriptionIngestionState) -> PrescriptionIngestionState:
@@ -206,7 +283,7 @@ async def retrieve_information(state: PrescriptionIngestionState) -> Prescriptio
     user_id = state["user_id"]
     
     try:
-        # Use Qdrant's filtering capabilities
+        # Create filter for user-specific data
         filter_condition = models.Filter(
             must=[
                 models.FieldCondition(
@@ -216,6 +293,8 @@ async def retrieve_information(state: PrescriptionIngestionState) -> Prescriptio
             ]
         )
         
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Searching with filter for user_id: {user_id}")
+        
         # Search with user filter
         retrieved_docs = vector_store.similarity_search(
             query, 
@@ -223,36 +302,70 @@ async def retrieve_information(state: PrescriptionIngestionState) -> Prescriptio
             filter=filter_condition
         )
         
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Retrieved {len(retrieved_docs)} documents for user {user_id}.")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Retrieved {len(retrieved_docs)} documents for user {user_id}")
+        
+        # Log retrieved documents for debugging
+        for i, doc in enumerate(retrieved_docs):
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Doc {i+1}: {doc.metadata.get('type', 'unknown')} - {doc.page_content[:100]}...")
+        
         return {"retrieved_info": retrieved_docs}
+        
     except Exception as e:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Error retrieving documents: {e}")
+        import traceback
+        traceback.print_exc()
         return {"retrieved_info": []}
 
 async def generate_response(state: PrescriptionIngestionState) -> PrescriptionIngestionState:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Generating response...")
-    system_message = (
-        "You are a helpful medical assistant. Use the following retrieved information and chat history "
-        "to answer the user's question. If you don't know the answer based on the provided context, "
-        "state that you don't have enough information from the records. "
-        "Be concise and directly answer the question."
-    )
-    prompt = ChatPromptTemplate.from_messages(
-        [
+    
+    retrieved_docs = state.get("retrieved_info", [])
+    question = state.get("question", "")
+    chat_history = state.get("chat_history", [])
+    
+    if not retrieved_docs:
+        response_content = "I don't have any prescription information available for you yet. Please upload a prescription first, and then I'll be able to help you with questions about your medications, dosages, and treatment plans."
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] No documents retrieved, returning default response")
+    else:
+        system_message = (
+            "You are a helpful medical assistant. Use the following retrieved prescription information "
+            "to answer the user's question accurately and helpfully. Focus on the specific medications, "
+            "dosages, and instructions mentioned in the prescription data. If the question cannot be "
+            "answered from the provided prescription information, clearly state that and suggest "
+            "consulting with a healthcare provider."
+        )
+        
+        prompt = ChatPromptTemplate.from_messages([
             ("system", system_message),
-            ("user", "Retrieved context:\n{context}\n\nChat history:\n{chat_history}\n\nQuestion: {question}")
-        ]
-    )
-    context = "\n".join([doc.page_content for doc in state["retrieved_info"]])
-    chat_history_str = "\n".join([f"{msg.type}: {msg.content}" for msg in state["chat_history"]])
-    chain = prompt | llm
-    response = await chain.ainvoke({
-        "context": context,
-        "chat_history": chat_history_str,
-        "question": state["question"]
-    })
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Response generated.")
-    return {"answer": response.content, "chat_history": state["chat_history"] + [HumanMessage(content=state["question"]), AIMessage(content=response.content)]}
+            ("user", "Retrieved prescription information:\n{context}\n\nChat history:\n{chat_history}\n\nQuestion: {question}")
+        ])
+        
+        context = "\n\n".join([f"Document {i+1}: {doc.page_content}" for i, doc in enumerate(retrieved_docs)])
+        chat_history_str = "\n".join([f"{msg.type}: {msg.content}" for msg in chat_history])
+        
+        try:
+            chain = prompt | llm
+            response = await chain.ainvoke({
+                "context": context,
+                "chat_history": chat_history_str,
+                "question": question
+            })
+            response_content = response.content
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Generated response using {len(retrieved_docs)} documents")
+        except Exception as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Error generating response: {e}")
+            response_content = "I encountered an error while processing your question. Please try again or rephrase your question."
+    
+    # Update chat history
+    updated_chat_history = chat_history + [
+        HumanMessage(content=question),
+        AIMessage(content=response_content)
+    ]
+    
+    return {
+        "answer": response_content,
+        "chat_history": updated_chat_history
+    }
 
 # --- Graph Definitions ---
 print("--- Prescription Ingestion Graph Compiled ---")
