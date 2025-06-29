@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes.auth_route import auth_router
-from routes.upload_routes import upload_router
-from routes.medication_routes import medication_router
-from routes.prescription_routes import prescription_router
-from routes.chat_routes import chat_router
-from routes.twilio_webhook import twilio_router
+from routes.auth_route import router as auth_router
+from routes.upload_routes import router as upload_router
+from routes.medication_routes import router as medication_router
+from routes.prescription_routes import router as prescription_router
+from routes.chat_routes import router as chat_router
+from routes.twilio_webhook import router as twilio_router
 
 app = FastAPI(title="MedTracker API", version="1.0.0")
 
