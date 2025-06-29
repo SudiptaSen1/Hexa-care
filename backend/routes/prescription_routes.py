@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Header
 from controllers.prescription_controller import process_prescription, get_user_prescriptions, get_active_medications
 from models.prescription_model import UserSchedule
 import json
@@ -8,7 +8,8 @@ router = APIRouter()
 @router.post("/upload-prescription")
 async def upload_prescription(
     file: UploadFile = File(...),
-    user_schedule_json: str = Form(...)
+    user_schedule_json: str = Form(...),
+    user_id: str = Header(None, alias="X-User-ID")
 ):
     """
     Upload and process a prescription file
@@ -16,6 +17,10 @@ async def upload_prescription(
     try:
         # Parse the user schedule from JSON string
         user_schedule = json.loads(user_schedule_json)
+        
+        # Add user_id to user_schedule if provided
+        if user_id:
+            user_schedule["user_id"] = user_id
         
         # Validate required fields
         required_fields = ["patient_name", "contact_number", "wake_up_time", "breakfast_time", 
@@ -39,21 +44,30 @@ async def upload_prescription(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/prescriptions/{patient_name}")
-async def get_prescriptions(patient_name: str):
+async def get_prescriptions(
+    patient_name: str,
+    user_id: str = Header(None, alias="X-User-ID")
+):
     """
     Get all prescriptions for a patient
     """
-    return await get_user_prescriptions(patient_name)
+    return await get_user_prescriptions(patient_name, user_id)
 
 @router.get("/active-medications/{patient_name}")
-async def get_medications(patient_name: str):
+async def get_medications(
+    patient_name: str,
+    user_id: str = Header(None, alias="X-User-ID")
+):
     """
     Get all active medication reminders for a patient
     """
-    return await get_active_medications(patient_name)
+    return await get_active_medications(patient_name, user_id)
 
 @router.delete("/prescription/{prescription_id}")
-async def delete_prescription(prescription_id: str):
+async def delete_prescription(
+    prescription_id: str,
+    user_id: str = Header(None, alias="X-User-ID")
+):
     """
     Delete a prescription and its associated medication reminders
     """
@@ -64,14 +78,23 @@ async def delete_prescription(prescription_id: str):
         prescriptions_collection = db["prescriptions"]
         medications_collection = db["medications"]
         
+        # Build query with user_id filter if provided
+        query = {"_id": ObjectId(prescription_id)}
+        if user_id:
+            query["user_id"] = user_id
+        
         # Delete prescription
-        prescription_result = await prescriptions_collection.delete_one({"_id": ObjectId(prescription_id)})
+        prescription_result = await prescriptions_collection.delete_one(query)
         
         if prescription_result.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Prescription not found")
+            raise HTTPException(status_code=404, detail="Prescription not found or access denied")
         
         # Delete associated medication reminders
-        medication_result = await medications_collection.delete_many({"prescription_id": prescription_id})
+        med_query = {"prescription_id": prescription_id}
+        if user_id:
+            med_query["user_id"] = user_id
+            
+        medication_result = await medications_collection.delete_many(med_query)
         
         return {
             "status": "success",
