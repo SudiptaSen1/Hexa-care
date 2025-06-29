@@ -2,6 +2,8 @@ import os
 from typing import TypedDict, List, Annotated, Dict, Optional, Union
 from datetime import datetime
 from dotenv import load_dotenv
+import uuid
+import json
 
 # Ensure environment variables are loaded as early as possible
 load_dotenv()
@@ -25,13 +27,13 @@ from langgraph.graph import StateGraph, END
 
 # Pydantic for data models
 from pydantic import BaseModel, Field, ValidationError
-import json
 
 # --- Configuration ---
 # Retrieve API key from environment variables
 gemini_api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 if gemini_api_key:
     genai.configure(api_key=gemini_api_key)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Gemini API configured successfully")
 else:
     print("WARNING: Gemini API key not found. Please set GEMINI_API_KEY or GOOGLE_API_KEY environment variable.")
 
@@ -39,33 +41,55 @@ llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
 embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
 
 # Qdrant Configuration
-QDRANT_URL = os.getenv("QDRANT_URL", "https://your-cluster-url.qdrant.tech")
+QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 COLLECTION_NAME = "medical_prescriptions"
 
-# Initialize Qdrant client
-qdrant_client = QdrantClient(
-    url=QDRANT_URL,
-    api_key=QDRANT_API_KEY,
-)
+print(f"[{datetime.now().strftime('%H:%M:%S')}] Qdrant URL: {QDRANT_URL}")
+print(f"[{datetime.now().strftime('%H:%M:%S')}] Qdrant API Key configured: {'Yes' if QDRANT_API_KEY else 'No'}")
 
-# Initialize vector store
-vector_store = QdrantVectorStore(
-    client=qdrant_client,
-    collection_name=COLLECTION_NAME,
-    embedding=embeddings,
-)
+# Initialize Qdrant client with error handling
+qdrant_client = None
+vector_store = None
 
-# Ensure collection exists
 try:
-    qdrant_client.get_collection(COLLECTION_NAME)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Qdrant collection '{COLLECTION_NAME}' exists.")
-except Exception:
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Creating Qdrant collection '{COLLECTION_NAME}'.")
-    qdrant_client.create_collection(
-        collection_name=COLLECTION_NAME,
-        vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE),
-    )
+    if QDRANT_URL and QDRANT_API_KEY:
+        qdrant_client = QdrantClient(
+            url=QDRANT_URL,
+            api_key=QDRANT_API_KEY,
+        )
+        
+        # Test connection
+        collections = qdrant_client.get_collections()
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Successfully connected to Qdrant. Collections: {len(collections.collections)}")
+        
+        # Ensure collection exists
+        try:
+            collection_info = qdrant_client.get_collection(COLLECTION_NAME)
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Collection '{COLLECTION_NAME}' exists with {collection_info.points_count} points")
+        except Exception:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Creating collection '{COLLECTION_NAME}'")
+            qdrant_client.create_collection(
+                collection_name=COLLECTION_NAME,
+                vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE),
+            )
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Collection '{COLLECTION_NAME}' created successfully")
+        
+        # Initialize vector store
+        vector_store = QdrantVectorStore(
+            client=qdrant_client,
+            collection_name=COLLECTION_NAME,
+            embedding=embeddings,
+        )
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Vector store initialized successfully")
+        
+    else:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] WARNING: Qdrant not configured. Missing URL or API key.")
+        
+except Exception as e:
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Failed to initialize Qdrant: {e}")
+    import traceback
+    traceback.print_exc()
 
 # --- Data Models ---
 class Medicine(BaseModel):
@@ -100,6 +124,123 @@ class PrescriptionIngestionState(TypedDict):
     ingestion_status: str
     user_summary: Optional[str]
 
+# --- Helper Functions ---
+async def store_documents_directly(documents: List[Document], user_id: str) -> bool:
+    """Store documents directly using Qdrant client for better control"""
+    if not qdrant_client or not vector_store:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Qdrant not available for storage")
+        return False
+    
+    try:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Storing {len(documents)} documents directly...")
+        
+        points = []
+        for i, doc in enumerate(documents):
+            # Generate embedding for the document
+            embedding = await embeddings.aembed_query(doc.page_content)
+            
+            # Create point with proper structure
+            point_id = str(uuid.uuid4())
+            point = models.PointStruct(
+                id=point_id,
+                vector=embedding,
+                payload={
+                    "page_content": doc.page_content,
+                    "metadata": doc.metadata
+                }
+            )
+            points.append(point)
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Created point {i+1}: {point_id} for user {user_id}")
+        
+        # Upsert points to Qdrant
+        operation_info = qdrant_client.upsert(
+            collection_name=COLLECTION_NAME,
+            points=points
+        )
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Upsert operation status: {operation_info.status}")
+        
+        # Verify storage
+        collection_info = qdrant_client.get_collection(COLLECTION_NAME)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Collection now has {collection_info.points_count} total points")
+        
+        # Test retrieval immediately
+        test_query = f"medications for user {user_id}"
+        test_embedding = await embeddings.aembed_query(test_query)
+        
+        search_result = qdrant_client.search(
+            collection_name=COLLECTION_NAME,
+            query_vector=test_embedding,
+            query_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="metadata.user_id",
+                        match=models.MatchValue(value=user_id)
+                    )
+                ]
+            ),
+            limit=3
+        )
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Verification search returned {len(search_result)} results")
+        for result in search_result:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Found: {result.payload.get('metadata', {}).get('type', 'unknown')} (score: {result.score})")
+        
+        return len(search_result) > 0
+        
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR in direct storage: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+async def search_documents_directly(query: str, user_id: str, limit: int = 5) -> List[Document]:
+    """Search documents directly using Qdrant client"""
+    if not qdrant_client or not embeddings:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Qdrant not available for search")
+        return []
+    
+    try:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Searching for: '{query}' for user: {user_id}")
+        
+        # Generate embedding for query
+        query_embedding = await embeddings.aembed_query(query)
+        
+        # Search with user filter
+        search_results = qdrant_client.search(
+            collection_name=COLLECTION_NAME,
+            query_vector=query_embedding,
+            query_filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="metadata.user_id",
+                        match=models.MatchValue(value=user_id)
+                    )
+                ]
+            ),
+            limit=limit
+        )
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Direct search returned {len(search_results)} results")
+        
+        # Convert to Document objects
+        documents = []
+        for result in search_results:
+            doc = Document(
+                page_content=result.payload.get("page_content", ""),
+                metadata=result.payload.get("metadata", {})
+            )
+            documents.append(doc)
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Retrieved doc: {doc.metadata.get('type', 'unknown')} (score: {result.score})")
+        
+        return documents
+        
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR in direct search: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
 # --- Nodes and Functions ---
 async def validate_and_parse_prescription(state: PrescriptionIngestionState) -> PrescriptionIngestionState:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Validating and parsing prescription record.")
@@ -108,29 +249,37 @@ async def validate_and_parse_prescription(state: PrescriptionIngestionState) -> 
         # First try to parse as JSON
         try:
             prescription_data = json.loads(prescription_json_str)
-        except json.JSONDecodeError:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Invalid JSON, treating as raw text")
-            return {"ingestion_status": "parsing_failed: Invalid JSON format"}
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Successfully parsed JSON")
+        except json.JSONDecodeError as e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Invalid JSON: {e}")
+            return {"ingestion_status": f"parsing_failed: Invalid JSON format - {e}"}
         
         # Validate with Pydantic
         parsed_data = PatientPrescriptionRecord.model_validate(prescription_data)
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Prescription parsed successfully for patient: {parsed_data.patient_name}")
         return {"parsed_prescription": parsed_data, "ingestion_status": "parsed"}
+        
     except ValidationError as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Error parsing prescription (Pydantic validation): {e}")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Pydantic validation error: {e}")
         return {"ingestion_status": f"parsing_failed: {e}"}
     except Exception as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Unexpected error parsing prescription: {e}")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Unexpected parsing error: {e}")
+        import traceback
+        traceback.print_exc()
         return {"ingestion_status": f"parsing_failed_unexpected: {e}"}
 
 async def store_prescription_data(state: PrescriptionIngestionState) -> PrescriptionIngestionState:
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Storing prescription for user.")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting prescription storage process.")
     parsed_prescription = state["parsed_prescription"]
     user_id = state["user_id"]
     
     if not parsed_prescription:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] No parsed prescription to store. Skipping storage.")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] No parsed prescription to store.")
         return {"ingestion_status": "no_parsed_data"}
+
+    if not qdrant_client:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Qdrant client not available")
+        return {"ingestion_status": "storage_failed: Qdrant not configured"}
 
     try:
         documents_to_add = []
@@ -140,8 +289,11 @@ async def store_prescription_data(state: PrescriptionIngestionState) -> Prescrip
             f"Patient: {parsed_prescription.patient_name} (Age: {parsed_prescription.age}). "
             f"Prescription Date: {parsed_prescription.date}. "
             f"Diagnosis: {parsed_prescription.diagnosis or 'Not specified'}. "
-            f"Doctor Instructions: {'; '.join(parsed_prescription.doctor_instructions) if parsed_prescription.doctor_instructions else 'None'}. "
         )
+        
+        # Add doctor instructions
+        if parsed_prescription.doctor_instructions:
+            prescription_summary += f"Doctor Instructions: {'; '.join(parsed_prescription.doctor_instructions)}. "
         
         # Add medication information to summary
         medication_info = []
@@ -166,10 +318,12 @@ async def store_prescription_data(state: PrescriptionIngestionState) -> Prescrip
                 "date_issued": parsed_prescription.date,
                 "diagnosis": parsed_prescription.diagnosis,
                 "medication_count": len(parsed_prescription.medicines),
-                "medications": [med.name for med in parsed_prescription.medicines]
+                "medications": [med.name for med in parsed_prescription.medicines],
+                "document_id": str(uuid.uuid4())
             }
         )
         documents_to_add.append(summary_doc)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Created prescription summary document")
         
         # Create individual medication documents for detailed queries
         for i, med in enumerate(parsed_prescription.medicines):
@@ -178,7 +332,8 @@ async def store_prescription_data(state: PrescriptionIngestionState) -> Prescrip
                 f"Dosage: {med.dosage}. "
                 f"Duration: {med.duration or 'Not specified'}. "
                 f"Additional notes: {med.notes or 'None'}. "
-                f"This medication is part of treatment for: {parsed_prescription.diagnosis}."
+                f"This medication is part of treatment for: {parsed_prescription.diagnosis}. "
+                f"Prescription date: {parsed_prescription.date}."
             )
             
             med_doc = Document(
@@ -191,18 +346,23 @@ async def store_prescription_data(state: PrescriptionIngestionState) -> Prescrip
                     "medication_dosage": med.dosage,
                     "medication_duration": med.duration,
                     "prescription_date": parsed_prescription.date,
-                    "diagnosis": parsed_prescription.diagnosis
+                    "diagnosis": parsed_prescription.diagnosis,
+                    "document_id": str(uuid.uuid4())
                 }
             )
             documents_to_add.append(med_doc)
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Created medication document for {med.name}")
         
         # Create diagnosis-specific document
         if parsed_prescription.diagnosis:
             diagnosis_content = (
                 f"Patient {parsed_prescription.patient_name} has been diagnosed with: {parsed_prescription.diagnosis}. "
                 f"Treatment includes the following medications: {', '.join([med.name for med in parsed_prescription.medicines])}. "
-                f"Doctor's instructions: {'; '.join(parsed_prescription.doctor_instructions) if parsed_prescription.doctor_instructions else 'None provided'}."
+                f"Prescription date: {parsed_prescription.date}. "
             )
+            
+            if parsed_prescription.doctor_instructions:
+                diagnosis_content += f"Doctor's instructions: {'; '.join(parsed_prescription.doctor_instructions)}."
             
             diagnosis_doc = Document(
                 page_content=diagnosis_content,
@@ -211,39 +371,26 @@ async def store_prescription_data(state: PrescriptionIngestionState) -> Prescrip
                     "patient_name": parsed_prescription.patient_name,
                     "user_id": user_id,
                     "diagnosis": parsed_prescription.diagnosis,
-                    "prescription_date": parsed_prescription.date
+                    "prescription_date": parsed_prescription.date,
+                    "document_id": str(uuid.uuid4())
                 }
             )
             documents_to_add.append(diagnosis_doc)
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Created diagnosis document")
         
-        # Add all documents to vector store
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Adding {len(documents_to_add)} documents to Qdrant...")
-        vector_store.add_documents(documents_to_add)
+        # Store documents using direct method
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Attempting to store {len(documents_to_add)} documents...")
+        storage_success = await store_documents_directly(documents_to_add, user_id)
         
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Successfully stored {len(documents_to_add)} documents in Qdrant for user {user_id}")
-        
-        # Verify storage by doing a quick search
-        try:
-            test_results = vector_store.similarity_search(
-                f"medications for {parsed_prescription.patient_name}",
-                k=1,
-                filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="metadata.user_id",
-                            match=models.MatchValue(value=user_id)
-                        )
-                    ]
-                )
-            )
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Verification search returned {len(test_results)} results")
-        except Exception as e:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Verification search failed: {e}")
-        
-        return {"ingestion_status": "completed"}
+        if storage_success:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Successfully stored all documents for user {user_id}")
+            return {"ingestion_status": "completed"}
+        else:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Failed to store documents")
+            return {"ingestion_status": "storage_failed: Document storage verification failed"}
         
     except Exception as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Error storing prescription data: {e}")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR in store_prescription_data: {e}")
         import traceback
         traceback.print_exc()
         return {"ingestion_status": f"storage_failed: {e}"}
@@ -278,40 +425,26 @@ async def generate_user_summary(state: PrescriptionIngestionState) -> Prescripti
     return {"user_summary": user_summary_content, "ingestion_status": "completed_with_summary"}
 
 async def retrieve_information(state: PrescriptionIngestionState) -> PrescriptionIngestionState:
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Retrieving information for query: {state['question']}")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Retrieving information for query: '{state['question']}'")
     query = state["question"]
     user_id = state["user_id"]
     
     try:
-        # Create filter for user-specific data
-        filter_condition = models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="metadata.user_id",
-                    match=models.MatchValue(value=user_id)
-                )
-            ]
-        )
-        
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Searching with filter for user_id: {user_id}")
-        
-        # Search with user filter
-        retrieved_docs = vector_store.similarity_search(
-            query, 
-            k=5,
-            filter=filter_condition
-        )
+        # Use direct search method
+        retrieved_docs = await search_documents_directly(query, user_id, limit=5)
         
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Retrieved {len(retrieved_docs)} documents for user {user_id}")
         
         # Log retrieved documents for debugging
         for i, doc in enumerate(retrieved_docs):
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Doc {i+1}: {doc.metadata.get('type', 'unknown')} - {doc.page_content[:100]}...")
+            doc_type = doc.metadata.get('type', 'unknown')
+            content_preview = doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Doc {i+1} ({doc_type}): {content_preview}")
         
         return {"retrieved_info": retrieved_docs}
         
     except Exception as e:
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Error retrieving documents: {e}")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR in retrieve_information: {e}")
         import traceback
         traceback.print_exc()
         return {"retrieved_info": []}
