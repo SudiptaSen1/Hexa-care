@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE = 'https://ea00-45-64-237-226.ngrok-free.app';
+export const API_BASE = 'http://localhost:8000';
 
 // API endpoints
 export const API_ENDPOINTS = {
@@ -45,7 +45,6 @@ export const API_ENDPOINTS = {
 export const apiCall = async (endpoint, options = {}) => {
   const url = `${API_BASE}${endpoint}`;
   const defaultHeaders = {
-    'ngrok-skip-browser-warning': 'true',
     'Content-Type': 'application/json',
   };
 
