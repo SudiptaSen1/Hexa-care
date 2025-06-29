@@ -337,7 +337,6 @@ async def get_medication_status(patient_name: str, user_id: str = None):
         
         # Also get upcoming medications for today that haven't been sent yet
         current_time = datetime.now()
-        current_hour_minute = current_time.strftime("%H:%M")
         
         # Find active medications that have times scheduled for today but haven't been logged yet
         active_meds_query = {

@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import HTTPException
 import google.generativeai as genai
 import os
@@ -60,8 +60,7 @@ class ChatController:
                 if current_date <= end_date:
                     active_medications.append(medication)
 
-            # Get recent medication logs
-            from datetime import timedelta
+            # Get recent medication logs (last 7 days)
             week_ago = current_date - timedelta(days=7)
             recent_logs = []
             async for log in medication_logs_collection.find({
@@ -144,7 +143,10 @@ Please provide a helpful, accurate response based on the medical information ava
             context_parts.append("=== PRESCRIPTIONS ===")
             for i, prescription in enumerate(prescriptions, 1):
                 parsed_data = prescription.get('parsed_data', {})
-                context_parts.append(f"Prescription {i} (Uploaded: {prescription.get('upload_date', 'Unknown').strftime('%Y-%m-%d') if prescription.get('upload_date') else 'Unknown'}):")
+                upload_date = prescription.get('upload_date')
+                upload_date_str = upload_date.strftime('%Y-%m-%d') if upload_date else 'Unknown'
+                
+                context_parts.append(f"Prescription {i} (Uploaded: {upload_date_str}):")
                 context_parts.append(f"  Patient: {parsed_data.get('patient_name', prescription.get('patient_name', 'Unknown'))}")
                 context_parts.append(f"  Date: {parsed_data.get('date', 'Unknown')}")
                 context_parts.append(f"  Diagnosis: {parsed_data.get('diagnosis', 'Not specified')}")
@@ -176,12 +178,15 @@ Please provide a helpful, accurate response based on the medical information ava
         if medications:
             context_parts.append("=== ACTIVE MEDICATIONS ===")
             for i, medication in enumerate(medications, 1):
+                start_date = medication.get('start_date')
+                start_date_str = start_date.strftime('%Y-%m-%d') if start_date else 'Unknown'
+                
                 context_parts.append(f"Medication {i}:")
                 context_parts.append(f"  Name: {medication.get('name', 'Unknown')}")
                 context_parts.append(f"  Dosage: {medication.get('dosage', 'Unknown')}")
                 context_parts.append(f"  Times: {', '.join(medication.get('times', []))}")
                 context_parts.append(f"  Duration: {medication.get('duration_days', 0)} days")
-                context_parts.append(f"  Started: {medication.get('start_date', 'Unknown').strftime('%Y-%m-%d') if medication.get('start_date') else 'Unknown'}")
+                context_parts.append(f"  Started: {start_date_str}")
                 if medication.get('message'):
                     context_parts.append(f"  Reminder Message: {medication['message']}")
                 context_parts.append("")
@@ -194,14 +199,19 @@ Please provide a helpful, accurate response based on the medical information ava
         if logs:
             context_parts.append("=== RECENT MEDICATION HISTORY (Last 7 days) ===")
             for i, log in enumerate(logs, 1):
+                sent_time = log.get('sent_time')
+                sent_time_str = sent_time.strftime('%Y-%m-%d %H:%M') if sent_time else 'Unknown'
+                response_time = log.get('response_time')
+                response_time_str = response_time.strftime('%Y-%m-%d %H:%M') if response_time else None
+                
                 context_parts.append(f"Log {i}:")
                 context_parts.append(f"  Time: {log.get('scheduled_time', 'Unknown')}")
                 context_parts.append(f"  Status: {log.get('status', 'Unknown')}")
-                context_parts.append(f"  Sent: {log.get('sent_time', 'Unknown').strftime('%Y-%m-%d %H:%M') if log.get('sent_time') else 'Unknown'}")
+                context_parts.append(f"  Sent: {sent_time_str}")
                 if log.get('response_message'):
                     context_parts.append(f"  Response: {log['response_message']}")
-                if log.get('response_time'):
-                    context_parts.append(f"  Responded at: {log['response_time'].strftime('%Y-%m-%d %H:%M') if log.get('response_time') else 'Unknown'}")
+                if response_time_str:
+                    context_parts.append(f"  Responded at: {response_time_str}")
                 context_parts.append("")
         else:
             context_parts.append("=== RECENT MEDICATION HISTORY ===")
@@ -237,10 +247,13 @@ Please provide a helpful, accurate response based on the medical information ava
             sessions_cursor = sessions_metadata_collection.find({"user_id": user_id})
             sessions = []
             async for session_doc in sessions_cursor:
+                created_at = session_doc.get("created_at")
+                created_at_str = created_at.isoformat() if created_at else None
+                
                 sessions.append({
                     "session_id": session_doc["session_id"],
                     "session_name": session_doc.get("session_name", "Unnamed Session"),
-                    "created_at": session_doc.get("created_at").isoformat() if session_doc.get("created_at") else None
+                    "created_at": created_at_str
                 })
             return {"user_id": user_id, "sessions": sessions}
         except Exception as e:
