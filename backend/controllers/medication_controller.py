@@ -108,7 +108,7 @@ async def process_medication_response(contact_number: str, message: str):
                 debug_logs.append({
                     "contact_number": log.get("contact_number"),
                     "status": log.get("status"),
-                    "sent_time": log.get("sent_time"),
+                    "sent_time": log.get("sent_time").isoformat() if log.get("sent_time") else None,
                     "scheduled_time": log.get("scheduled_time")
                 })
             
@@ -174,9 +174,9 @@ async def get_medication_adherence(patient_name: str, days: int = 7, user_id: st
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
         
-        # Build query with user_id filter if provided
+        # Build query with user_id filter if provided and use regex for patient name
         query = {
-            "patient_name": patient_name,
+            "patient_name": {"$regex": f"^{re.escape(patient_name)}$", "$options": "i"},
             "sent_time": {"$gte": start_date, "$lte": end_date}
         }
         if user_id:
@@ -185,8 +185,22 @@ async def get_medication_adherence(patient_name: str, days: int = 7, user_id: st
         # Get all medication logs for the patient in the specified period
         logs = []
         async for log in medication_logs_collection.find(query):
-            log["_id"] = str(log["_id"])
-            logs.append(log)
+            # Convert datetime objects to strings for JSON serialization
+            log_dict = {
+                "_id": str(log["_id"]),
+                "medication_id": log.get("medication_id", ""),
+                "patient_name": log.get("patient_name", ""),
+                "contact_number": log.get("contact_number", ""),
+                "scheduled_time": log.get("scheduled_time", ""),
+                "sent_time": log.get("sent_time").isoformat() if log.get("sent_time") else None,
+                "status": log.get("status", "pending"),
+                "response_received": log.get("response_received", False),
+                "response_time": log.get("response_time").isoformat() if log.get("response_time") else None,
+                "response_message": log.get("response_message", "")
+            }
+            if "user_id" in log:
+                log_dict["user_id"] = log["user_id"]
+            logs.append(log_dict)
         
         total_reminders = len(logs)
         taken_count = len([log for log in logs if log["status"] == "taken"])
@@ -208,6 +222,9 @@ async def get_medication_adherence(patient_name: str, days: int = 7, user_id: st
         }
         
     except Exception as e:
+        print(f"Error in get_medication_adherence: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error getting adherence data: {str(e)}")
 
 async def get_recent_confirmations(patient_name: str, limit: int = 10, user_id: str = None):
@@ -215,8 +232,8 @@ async def get_recent_confirmations(patient_name: str, limit: int = 10, user_id: 
     Get recent medication confirmations for a patient
     """
     try:
-        # Build query with user_id filter if provided
-        query = {"patient_name": patient_name}
+        # Build query with user_id filter if provided and use regex for patient name
+        query = {"patient_name": {"$regex": f"^{re.escape(patient_name)}$", "$options": "i"}}
         if user_id:
             query["user_id"] = user_id
             
@@ -224,8 +241,21 @@ async def get_recent_confirmations(patient_name: str, limit: int = 10, user_id: 
         async for confirmation in medication_confirmations_collection.find(
             query
         ).sort("confirmation_time", -1).limit(limit):
-            confirmation["_id"] = str(confirmation["_id"])
-            confirmations.append(confirmation)
+            # Convert datetime objects to strings for JSON serialization
+            confirmation_dict = {
+                "_id": str(confirmation["_id"]),
+                "medication_id": confirmation.get("medication_id", ""),
+                "patient_name": confirmation.get("patient_name", ""),
+                "contact_number": confirmation.get("contact_number", ""),
+                "scheduled_time": confirmation.get("scheduled_time", ""),
+                "confirmation_time": confirmation.get("confirmation_time").isoformat() if confirmation.get("confirmation_time") else None,
+                "is_taken": confirmation.get("is_taken", False),
+                "response_message": confirmation.get("response_message", ""),
+                "log_id": confirmation.get("log_id", "")
+            }
+            if "user_id" in confirmation:
+                confirmation_dict["user_id"] = confirmation["user_id"]
+            confirmations.append(confirmation_dict)
         
         return {
             "status": "success",
@@ -233,4 +263,66 @@ async def get_recent_confirmations(patient_name: str, limit: int = 10, user_id: 
         }
         
     except Exception as e:
+        print(f"Error in get_recent_confirmations: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Error getting confirmations: {str(e)}")
+
+async def get_medication_status(patient_name: str, user_id: str = None):
+    """
+    Get current medication status overview for a patient
+    """
+    try:
+        # Get today's medication logs
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow = today + timedelta(days=1)
+        
+        # Build query with user_id filter if provided and use regex for patient name
+        query = {
+            "patient_name": {"$regex": f"^{re.escape(patient_name)}$", "$options": "i"},
+            "sent_time": {"$gte": today, "$lt": tomorrow}
+        }
+        if user_id:
+            query["user_id"] = user_id
+        
+        today_logs = []
+        async for log in medication_logs_collection.find(query).sort("sent_time", 1):
+            # Convert datetime objects to strings for JSON serialization
+            log_dict = {
+                "_id": str(log["_id"]),
+                "medication_id": log.get("medication_id", ""),
+                "patient_name": log.get("patient_name", ""),
+                "contact_number": log.get("contact_number", ""),
+                "scheduled_time": log.get("scheduled_time", ""),
+                "sent_time": log.get("sent_time").isoformat() if log.get("sent_time") else None,
+                "status": log.get("status", "pending"),
+                "response_received": log.get("response_received", False),
+                "response_time": log.get("response_time").isoformat() if log.get("response_time") else None,
+                "response_message": log.get("response_message", "")
+            }
+            if "user_id" in log:
+                log_dict["user_id"] = log["user_id"]
+            today_logs.append(log_dict)
+        
+        taken_today = len([log for log in today_logs if log["status"] == "taken"])
+        missed_today = len([log for log in today_logs if log["status"] == "missed"])
+        pending_today = len([log for log in today_logs if log["status"] == "pending"])
+        
+        return {
+            "status": "success",
+            "patient_name": patient_name,
+            "date": today.strftime("%Y-%m-%d"),
+            "today_summary": {
+                "total": len(today_logs),
+                "taken": taken_today,
+                "missed": missed_today,
+                "pending": pending_today
+            },
+            "today_logs": today_logs
+        }
+        
+    except Exception as e:
+        print(f"Error in get_medication_status: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error getting medication status: {str(e)}")
