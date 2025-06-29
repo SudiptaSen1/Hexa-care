@@ -1,59 +1,35 @@
 from fastapi import FastAPI
-from routes.upload_routes import router as upload_router
-from routes.auth_route import router as auth_router
-from routes.prescription_routes import router as prescription_router
-from routes.medication_routes import router as medication_router
-from routes.twilio_webhook import router as webhook_router
-import utils.cloudinary_config  # auto-loads config
-from utils.schedular import start_scheduler
-from pydantic import BaseModel
-from typing import List
-from pymongo import MongoClient
-from datetime import date
-from datetime import datetime
-import os
-from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+from routes.auth_route import router as auth_router
+from routes.upload_routes import router as upload_router
+from routes.medication_routes import router as medication_router
+from routes.prescription_routes import router as prescription_router
+from routes.chat_routes import router as chat_router
+from routes.twilio_webhook import router as twilio_router
 
-app = FastAPI()
+app = FastAPI(title="MedTracker API", version="1.0.0")
+
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change to frontend URL in prod
+    allow_origins=["*"],  # Configure this properly for production
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*", "X-User-ID"],
+    allow_headers=["*"],
 )
 
-@app.on_event("startup")
-def startup_event():
-    start_scheduler()
+# Include routers
+app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(upload_router, prefix="/api/upload", tags=["Upload"])
+app.include_router(medication_router, prefix="/api/medications", tags=["Medications"])
+app.include_router(prescription_router, prefix="/api/prescriptions", tags=["Prescriptions"])
+app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
+app.include_router(twilio_router, prefix="/api/twilio", tags=["Twilio"])
 
-class Medicine(BaseModel):
-    patient_name: str
-    name: str
-    dosage: str
-    times: List[str]
-    duration_days: int
-    start_date: date
-    contact_number: str
+@app.get("/")
+async def root():
+    return {"message": "MedTracker API is running"}
 
-load_dotenv()
-client = MongoClient(os.getenv("MONGODB_URI"))
-db = client[os.getenv("DB_NAME")]
-medications = db["medications"]
-
-@app.post("/add-medication")
-async def add_medication(med: Medicine):
-    try:
-        data = med.dict()
-        data["start_date"] = datetime.combine(data["start_date"], datetime.min.time())  # convert date to datetime
-        medications.insert_one(data)
-        return {"status": "success", "message": "Medication reminder added"}
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
-
-print(os.getenv("TWILIO_SMS_FROM"))
-
-include_router = [upload_router, auth_router, prescription_router, medication_router, webhook_router]
-for router in include_router:
-    app.include_router(router)
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}

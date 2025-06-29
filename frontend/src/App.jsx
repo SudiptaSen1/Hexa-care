@@ -1,6 +1,6 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom"
-import Home from "../components/Home"
 import { ThemeProvider } from "../components/ThemeProvider"
+import { AuthProvider } from "./context/AuthContext"
 import { Landing } from "../pages/Landing"
 import MainLayout from "../layout/MainLayout"
 import { Dashboard } from "../pages/Dashboard"
@@ -10,77 +10,50 @@ import Notification from "../pages/Notification"
 import Upload from "../pages/Upload"
 import MedicationTracking from "../pages/MedicationTracking"
 
-
 const appRouter = createBrowserRouter([
-	{
-		path: '/',
-		element: <MainLayout />,
+  {
+    path: '/',
+    element: <MainLayout />,
     children: [
       {
         path: '/',
-        element: 
-          <>
-            <Landing />
-          </>
+        element: <Landing />
       },
       {
         path: '/login',
-        element: 
-          <>
-            <Login />
-          </>
+        element: <Login />
       },
       {
         path: '/dashboard',
-        element:
-          <>
-            <Dashboard />
-          </>
+        element: <Dashboard />
       },
       {
         path: '/chat',
-        element:
-          <>
-            <Chat />
-          </>
+        element: <Chat />
       },
       {
         path: '/notification',
-        element:
-          <>
-            <Notification />
-          </>
-      },{
-      path: '/upload',
-        element:
-          <>
-            <Upload /> 
-          </>
+        element: <Notification />
       },
       {
-
+        path: '/upload',
+        element: <Upload />
+      },
+      {
         path: '/medication-tracking',
-        element:
-          <>
-            <MedicationTracking />
-
-          </>
+        element: <MedicationTracking />
       }
     ]
-	}
+  }
 ])
 
 function App() {
-
   return (
-    <>
-      <ThemeProvider>
-
+    <ThemeProvider>
+      <AuthProvider>
         <RouterProvider router={appRouter} />
-
-      </ThemeProvider>
-      
-    </>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 

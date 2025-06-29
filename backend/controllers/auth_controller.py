@@ -25,8 +25,12 @@ async def signup(user: UserCreate):
         "password": hashed_pw.decode("utf-8")
     }
 
-    await user_collection.insert_one(user_dict)
-    return {"username": user.username, "email": user.email}
+    result = await user_collection.insert_one(user_dict)
+    return {
+        "username": user.username.lower(),
+        "email": user.email.lower(),
+        "user_id": str(result.inserted_id)
+    }
 
 
 async def signin(user: UserLogin):
@@ -45,12 +49,16 @@ async def signin(user: UserLogin):
     if not bcrypt.checkpw(user.password.encode("utf-8"), found_user["password"].encode("utf-8")):
         raise HTTPException(status_code=401, detail="Incorrect password")
 
-    return {"username": found_user["username"], "email": found_user["email"]}
+    return {
+        "username": found_user["username"],
+        "email": found_user["email"],
+        "user_id": str(found_user["_id"])
+    }
 
 async def get_user_by_id(user_id: str):
     try:
-        _id = ObjectId(user_id) 
-    except InvalidId: 
+        _id = ObjectId(user_id)
+    except InvalidId:
         raise HTTPException(status_code=400, detail="Invalid user ID")
 
     user = await user_collection.find_one({"_id": _id})
@@ -60,5 +68,6 @@ async def get_user_by_id(user_id: str):
     return UserWithId(
         id=str(user["_id"]),
         username=user["username"],
-        email=user["email"]
+        email=user["email"],
+        user_id=str(user["_id"])
     )

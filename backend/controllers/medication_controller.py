@@ -8,7 +8,7 @@ medications_collection = db["medications"]
 medication_logs_collection = db["medication_logs"]
 medication_confirmations_collection = db["medication_confirmations"]
 
-async def log_medication_reminder(medication_id: str, patient_name: str, contact_number: str, scheduled_time: str):
+async def log_medication_reminder(medication_id: str, patient_name: str, contact_number: str, scheduled_time: str, user_id: str = None):
     """
     Log when a medication reminder is sent
     """
@@ -22,6 +22,10 @@ async def log_medication_reminder(medication_id: str, patient_name: str, contact
             "status": "pending",
             "response_received": False
         }
+        
+        # Add user_id if provided
+        if user_id:
+            log_entry["user_id"] = user_id
         
         result = await medication_logs_collection.insert_one(log_entry)
         return str(result.inserted_id)
@@ -142,6 +146,10 @@ async def process_medication_response(contact_number: str, message: str):
             "log_id": str(recent_log["_id"])
         }
         
+        # Add user_id if present in the log
+        if "user_id" in recent_log:
+            confirmation_record["user_id"] = recent_log["user_id"]
+        
         await medication_confirmations_collection.insert_one(confirmation_record)
         
         return {
@@ -158,7 +166,7 @@ async def process_medication_response(contact_number: str, message: str):
         traceback.print_exc()
         return {"status": "error", "message": str(e)}
 
-async def get_medication_adherence(patient_name: str, days: int = 7):
+async def get_medication_adherence(patient_name: str, days: int = 7, user_id: str = None):
     """
     Get medication adherence statistics for a patient
     """
@@ -166,12 +174,17 @@ async def get_medication_adherence(patient_name: str, days: int = 7):
         end_date = datetime.now()
         start_date = end_date - timedelta(days=days)
         
-        # Get all medication logs for the patient in the specified period
-        logs = []
-        async for log in medication_logs_collection.find({
+        # Build query with user_id filter if provided
+        query = {
             "patient_name": patient_name,
             "sent_time": {"$gte": start_date, "$lte": end_date}
-        }):
+        }
+        if user_id:
+            query["user_id"] = user_id
+        
+        # Get all medication logs for the patient in the specified period
+        logs = []
+        async for log in medication_logs_collection.find(query):
             log["_id"] = str(log["_id"])
             logs.append(log)
         
@@ -197,14 +210,19 @@ async def get_medication_adherence(patient_name: str, days: int = 7):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting adherence data: {str(e)}")
 
-async def get_recent_confirmations(patient_name: str, limit: int = 10):
+async def get_recent_confirmations(patient_name: str, limit: int = 10, user_id: str = None):
     """
     Get recent medication confirmations for a patient
     """
     try:
+        # Build query with user_id filter if provided
+        query = {"patient_name": patient_name}
+        if user_id:
+            query["user_id"] = user_id
+            
         confirmations = []
         async for confirmation in medication_confirmations_collection.find(
-            {"patient_name": patient_name}
+            query
         ).sort("confirmation_time", -1).limit(limit):
             confirmation["_id"] = str(confirmation["_id"])
             confirmations.append(confirmation)

@@ -30,8 +30,9 @@ async def process_prescription(file: UploadFile, user_schedule: dict):
             # Generate personalized messages
             messages_by_time = create_personalized_messages_by_exact_time(parsed_data)
 
-            # Store prescription data
+            # Store prescription data with user_id
             prescription_record = {
+                "user_id": user_schedule.get("user_id"),  # Add user_id
                 "patient_name": user_schedule["patient_name"],
                 "contact_number": user_schedule["contact_number"],
                 "upload_date": datetime.now(),
@@ -65,6 +66,7 @@ async def process_prescription(file: UploadFile, user_schedule: dict):
                         max_duration_days = 30  # Default duration
 
                     medication_record = {
+                        "user_id": user_schedule.get("user_id"),  # Add user_id
                         "prescription_id": prescription_id,
                         "patient_name": user_schedule["patient_name"],
                         "contact_number": user_schedule["contact_number"],
@@ -97,13 +99,17 @@ async def process_prescription(file: UploadFile, user_schedule: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing prescription: {str(e)}")
 
-async def get_user_prescriptions(patient_name: str):
+async def get_user_prescriptions(patient_name: str, user_id: str = None):
     """
-    Get all prescriptions for a specific patient
+    Get all prescriptions for a specific patient, optionally filtered by user_id
     """
     try:
+        query = {"patient_name": patient_name}
+        if user_id:
+            query["user_id"] = user_id
+            
         prescriptions = []
-        async for prescription in prescriptions_collection.find({"patient_name": patient_name}):
+        async for prescription in prescriptions_collection.find(query):
             prescription["_id"] = str(prescription["_id"])
             prescriptions.append(prescription)
         
@@ -114,18 +120,19 @@ async def get_user_prescriptions(patient_name: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching prescriptions: {str(e)}")
 
-async def get_active_medications(patient_name: str):
+async def get_active_medications(patient_name: str, user_id: str = None):
     """
-    Get all active medication reminders for a specific patient
+    Get all active medication reminders for a specific patient, optionally filtered by user_id
     """
     try:
         current_date = datetime.now()
         
+        query = {"patient_name": patient_name, "start_date": {"$lte": current_date}}
+        if user_id:
+            query["user_id"] = user_id
+        
         active_medications = []
-        async for medication in medications_collection.find({
-            "patient_name": patient_name,
-            "start_date": {"$lte": current_date}
-        }):
+        async for medication in medications_collection.find(query):
             # Check if medication is still active
             start_date = medication["start_date"]
             duration_days = medication["duration_days"]

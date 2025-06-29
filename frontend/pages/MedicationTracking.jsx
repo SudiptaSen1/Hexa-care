@@ -11,10 +11,12 @@ import {
   TrendingUp,
   Calendar,
   Pill,
-  MessageSquare
+  MessageSquare,
+  Loader2
 } from 'lucide-react';
-
-const API_BASE = 'https://fd41-45-64-237-226.ngrok-free.app/';
+import { useAuth } from '../src/context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { apiCall, API_ENDPOINTS } from '../src/config/api';
 
 const MedicationTracking = () => {
   const [patientName, setPatientName] = useState('');
@@ -22,55 +24,77 @@ const MedicationTracking = () => {
   const [confirmations, setConfirmations] = useState([]);
   const [todayStatus, setTodayStatus] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { user, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
 
-  const fetchAdherenceData = async () => {
-    if (!patientName.trim()) return;
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+    
+    if (user?.username) {
+      setPatientName(user.username);
+      // Auto-load data for current user
+      fetchAllData(user.username);
+    }
+  }, [isAuthenticated, user, navigate]);
+
+  const fetchAllData = async (name) => {
+    if (!name.trim()) return;
     
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/medication-adherence/${patientName}?days=7`);
-      const data = await response.json();
-      if (data.status === 'success') {
-        setAdherenceData(data);
+      await Promise.all([
+        fetchAdherenceData(name),
+        fetchConfirmations(name),
+        fetchTodayStatus(name)
+      ]);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAdherenceData = async (name) => {
+    try {
+      const response = await apiCall(`${API_ENDPOINTS.MEDICATIONS.ADHERENCE}/${encodeURIComponent(name)}?days=7`);
+      if (response.status === 'success') {
+        setAdherenceData(response);
       }
     } catch (error) {
       console.error('Error fetching adherence data:', error);
+      setAdherenceData(null);
     }
-    setLoading(false);
   };
 
-  const fetchConfirmations = async () => {
-    if (!patientName.trim()) return;
-    
+  const fetchConfirmations = async (name) => {
     try {
-      const response = await fetch(`${API_BASE}/medication-confirmations/${patientName}`);
-      const data = await response.json();
-      if (data.status === 'success') {
-        setConfirmations(data.confirmations);
+      const response = await apiCall(`${API_ENDPOINTS.MEDICATIONS.CONFIRMATIONS}/${encodeURIComponent(name)}`);
+      if (response.status === 'success') {
+        setConfirmations(response.confirmations);
       }
     } catch (error) {
       console.error('Error fetching confirmations:', error);
+      setConfirmations([]);
     }
   };
 
-  const fetchTodayStatus = async () => {
-    if (!patientName.trim()) return;
-    
+  const fetchTodayStatus = async (name) => {
     try {
-      const response = await fetch(`${API_BASE}/medication-status/${patientName}`);
-      const data = await response.json();
-      if (data.status === 'success') {
-        setTodayStatus(data);
+      const response = await apiCall(`${API_ENDPOINTS.MEDICATIONS.STATUS}/${encodeURIComponent(name)}`);
+      if (response.status === 'success') {
+        setTodayStatus(response);
       }
     } catch (error) {
       console.error('Error fetching today status:', error);
+      setTodayStatus(null);
     }
   };
 
   const handleSearch = () => {
-    fetchAdherenceData();
-    fetchConfirmations();
-    fetchTodayStatus();
+    fetchAllData(patientName);
   };
 
   const getStatusColor = (status) => {
@@ -91,8 +115,12 @@ const MedicationTracking = () => {
     }
   };
 
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
-    <div className="space-y-6 px-10 py-5">
+    <div className="space-y-6 px-4 md:px-10 py-5">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Medication Tracking</h1>
@@ -119,7 +147,14 @@ const MedicationTracking = () => {
             </div>
             <div className="flex items-end">
               <Button onClick={handleSearch} disabled={loading || !patientName.trim()}>
-                {loading ? 'Loading...' : 'Search'}
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Search'
+                )}
               </Button>
             </div>
           </div>
@@ -158,7 +193,7 @@ const MedicationTracking = () => {
               </div>
             </div>
 
-            {todayStatus.today_logs.length > 0 && (
+            {todayStatus.today_logs && todayStatus.today_logs.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-semibold">Today's Reminders</h4>
                 {todayStatus.today_logs.map((log, index) => (
@@ -262,7 +297,7 @@ const MedicationTracking = () => {
       )}
 
       {/* Detailed Logs */}
-      {adherenceData && adherenceData.logs.length > 0 && (
+      {adherenceData && adherenceData.logs && adherenceData.logs.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Detailed Medication Log</CardTitle>
@@ -297,6 +332,23 @@ const MedicationTracking = () => {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No Data State */}
+      {!loading && !adherenceData && !todayStatus && patientName && (
+        <Card>
+          <CardContent className="text-center py-8">
+            <Pill className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Medication Data Found</h3>
+            <p className="text-muted-foreground mb-4">
+              No medication tracking data found for "{patientName}". 
+              Make sure you have uploaded prescriptions and set up medication reminders.
+            </p>
+            <Button onClick={() => navigate('/upload')}>
+              Upload Prescription
+            </Button>
           </CardContent>
         </Card>
       )}
