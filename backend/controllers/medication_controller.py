@@ -8,9 +8,40 @@ medications_collection = db["medications"]
 medication_logs_collection = db["medication_logs"]
 medication_confirmations_collection = db["medication_confirmations"]
 
+def log_medication_reminder_sync(medication_id: str, patient_name: str, contact_number: str, scheduled_time: str, user_id: str = None):
+    """
+    Synchronous version of log_medication_reminder for use in scheduler
+    """
+    try:
+        log_entry = {
+            "medication_id": medication_id,
+            "patient_name": patient_name,
+            "contact_number": contact_number,
+            "scheduled_time": scheduled_time,
+            "sent_time": datetime.now(),
+            "status": "pending",
+            "response_received": False
+        }
+        
+        # Add user_id if provided
+        if user_id:
+            log_entry["user_id"] = user_id
+        
+        # Use synchronous MongoDB client for scheduler
+        from pymongo import MongoClient
+        import os
+        client = MongoClient(os.getenv("MONGODB_URI"))
+        db_sync = client[os.getenv("DB_NAME", "hexacare")]
+        result = db_sync["medication_logs"].insert_one(log_entry)
+        print(f"✅ Logged medication reminder: {result.inserted_id}")
+        return str(result.inserted_id)
+    except Exception as e:
+        print(f"❌ Error logging medication reminder: {e}")
+        return None
+
 async def log_medication_reminder(medication_id: str, patient_name: str, contact_number: str, scheduled_time: str, user_id: str = None):
     """
-    Log when a medication reminder is sent
+    Async version for use in API endpoints
     """
     try:
         log_entry = {
