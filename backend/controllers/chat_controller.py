@@ -3,22 +3,10 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from fastapi import HTTPException
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from utils.db import db  # Make sure this provides your MongoDB client
+from utils.db import db
 
 # Import the compiled graphs from summary_graph
 from rag_pipeline.summary_graph import query_graph, PrescriptionIngestionState
-
-# If you have a separate db_service for managing session metadata
-# (which is implied by your `chat_service.py` logic), import it here.
-# For example:
-# from services.database_service import db_service
-# NOTE: The provided `chat_service.py` indicates `db_service` is used there,
-# but `chat_controller.py` itself doesn't directly use it for session listing.
-# If `get_all_user_sessions` is intended to list sessions from LangGraph's
-# checkpoint store directly, that would require different logic.
-# Based on the structure, `get_all_user_sessions` likely lists sessions
-# from your custom `sessions_collection` managed by your application.
-
 
 class ChatController:
     # Function to start a new chat session (generate session_id)
@@ -43,17 +31,31 @@ class ChatController:
         thread_id = f"{user_id}_{session_id}"
         print(f"[{datetime.now().strftime('%H:%M:%S')}] User {user_id} sending message in session {session_id} (thread: {thread_id}): {message}")
 
+        # Retrieve existing chat history
+        chat_sessions_collection = db["chat_sessions"]
+        existing_session = await chat_sessions_collection.find_one({"user_id": user_id, "session_id": session_id})
+        
+        existing_chat_history = []
+        if existing_session and "chat_history" in existing_session:
+            # Convert dict back to BaseMessage objects
+            for msg_dict in existing_session["chat_history"]:
+                if msg_dict.get("type") == "human":
+                    existing_chat_history.append(HumanMessage(content=msg_dict["content"]))
+                elif msg_dict.get("type") == "ai":
+                    existing_chat_history.append(AIMessage(content=msg_dict["content"]))
+
         # Build the initial state for the graph
         initial_state: PrescriptionIngestionState = {
             "user_id": user_id,
             "session_id": session_id,
             "question": message,
-            "chat_history": [],
+            "chat_history": existing_chat_history,
             "answer": "",
             "retrieved_info": [],
             "parsed_prescription": None,
             "user_summary": None,
             "ingestion_status": "started",
+            "prescription_text": "",
         }
 
         try:
@@ -62,7 +64,6 @@ class ChatController:
             updated_chat_history = final_state.get("chat_history", [])
 
             # Persist chat history in MongoDB
-            chat_sessions_collection = db["chat_sessions"]
             await chat_sessions_collection.update_one(
                 {"user_id": user_id, "session_id": session_id},
                 {"$set": {"chat_history": [msg.dict() for msg in updated_chat_history]}},
@@ -101,9 +102,8 @@ class ChatController:
         except Exception as e:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Error retrieving chat history for thread {thread_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to retrieve chat history: {e}")
+
     # Function to get all chat sessions for a user
-    # This assumes session metadata (like session_name, created_at) is stored
-    # in a separate custom collection, not directly derived from LangGraph's raw checkpoints.
     async def get_all_user_sessions(self, user_id: str) -> Dict[str, Any]:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Getting all chat sessions for user {user_id}.")
         try:
@@ -120,6 +120,5 @@ class ChatController:
         except Exception as e:
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Error retrieving sessions for user {user_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to retrieve sessions: {e}")
-
 
 chat_controller = ChatController()

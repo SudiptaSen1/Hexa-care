@@ -12,6 +12,6 @@ async def register_user(user: UserCreate):
 async def login_user(user: UserLogin):
     return await signin(user)
 
-# @router.get("/user/{user_id}", response_model=UserResponse)
-# async def get_user(user_id: str = Path(..., description="MongoDB user _id")):
-#     return await get_user_by_id(user_id)
+@router.get("/user/{user_id}")
+async def get_user(user_id: str):
+    return await get_user_by_id(user_id)

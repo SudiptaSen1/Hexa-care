@@ -4,6 +4,7 @@ from routes.auth_route import router as auth_router
 from routes.prescription_routes import router as prescription_router
 from routes.medication_routes import router as medication_router
 from routes.twilio_webhook import router as webhook_router
+from routes.chat_routes import router as chat_router
 import utils.cloudinary_config  # auto-loads config
 from utils.schedular import start_scheduler
 from pydantic import BaseModel
@@ -36,6 +37,7 @@ class Medicine(BaseModel):
     duration_days: int
     start_date: date
     contact_number: str
+    user_id: str = None  # Add user_id field
 
 load_dotenv()
 client = MongoClient(os.getenv("MONGODB_URI"))
@@ -54,6 +56,6 @@ async def add_medication(med: Medicine):
 
 print(os.getenv("TWILIO_SMS_FROM"))
 
-include_router = [upload_router, auth_router, prescription_router, medication_router, webhook_router]
+include_router = [upload_router, auth_router, prescription_router, medication_router, webhook_router, chat_router]
 for router in include_router:
     app.include_router(router)
