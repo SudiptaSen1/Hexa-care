@@ -110,12 +110,32 @@
   --sidebar-ring: oklch(0.645 0.246 16.439);
 }
 
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+  }
+  
+  /* Ensure proper text contrast */
+  .text-foreground {
+    color: var(--foreground) !important;
+  }
+  
+  .text-card-foreground {
+    color: var(--card-foreground) !important;
+  }
+  
+  .bg-background {
+    background-color: var(--background) !important;
+  }
+  
+  .bg-card {
+    background-color: var(--card) !important;
+  }
+  
+  .border-border {
+    border-color: var(--border) !important;
   }
 }
