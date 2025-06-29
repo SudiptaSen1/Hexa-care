@@ -9,10 +9,6 @@ load_dotenv()
 # Import google.generativeai BEFORE it's used for configuration
 import google.generativeai as genai
 
-# Correct checkpoint saver import
-from pymongo import MongoClient
-from langgraph.checkpoint.mongodb.aio import AsyncMongoDBSaver
-
 # LangChain Imports for LLM and Embeddings
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
@@ -35,22 +31,6 @@ if gemini_api_key:
     genai.configure(api_key=gemini_api_key)
 else:
     print("WARNING: Gemini API key not found. Please set GEMINI_API_KEY or GOOGLE_API_KEY environment variable.")
-
-# MongoDB connection for Checkpoint Saver
-MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/")
-DB_NAME = os.getenv("DB_NAME", "hexacare")
-
-# Initialize MongoDB client and checkpoint saver
-try:
-    mongo_client = MongoClient(MONGO_URI)
-    mongo_db = mongo_client[DB_NAME]
-    saver = AsyncMongoDBSaver(mongo_db)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] MongoDB Checkpoint Saver initialized. Chat history will be persistent.")
-except Exception as e:
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] ERROR: Could not connect to MongoDB for checkpointing: {e}")
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Falling back to in-memory checkpointing. Chat history will NOT be persistent across restarts.")
-    from langgraph.checkpoint.memory import MemorySaver
-    saver = MemorySaver()
 
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
 embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")

@@ -2,9 +2,11 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from pymongo import MongoClient
 from datetime import datetime
 from utils.notificatiins import send_sms, send_whatsapp
+from controllers.medication_controller import log_medication_reminder
 import pytz
 import os
 from dotenv import load_dotenv
+import asyncio
 
 load_dotenv()
 
@@ -13,7 +15,7 @@ db = client[os.getenv("DB_NAME", "hexacare")]
 meds = db["medications"]
 medication_logs = db["medication_logs"]
 
-def log_medication_reminder_sync(medication_id: str, patient_name: str, contact_number: str, scheduled_time: str):
+def log_medication_reminder_sync(medication_id: str, patient_name: str, contact_number: str, scheduled_time: str, user_id: str = None):
     """
     Synchronous version of log_medication_reminder for use in scheduler
     """
@@ -27,6 +29,10 @@ def log_medication_reminder_sync(medication_id: str, patient_name: str, contact_
             "status": "pending",
             "response_received": False
         }
+        
+        # Add user_id if provided
+        if user_id:
+            log_entry["user_id"] = user_id
         
         result = medication_logs.insert_one(log_entry)
         print(f"✅ Logged medication reminder: {result.inserted_id}")
@@ -66,11 +72,14 @@ def check_and_send_sms():
 
         # Log the reminder being sent
         medication_id = str(med.get("_id", ""))
+        user_id = med.get("user_id")  # Get user_id from medication record
+        
         log_id = log_medication_reminder_sync(
             medication_id=medication_id,
             patient_name=med['patient_name'],
             contact_number=med["contact_number"],
-            scheduled_time=current_time_str
+            scheduled_time=current_time_str,
+            user_id=user_id
         )
 
         # Send both SMS and WhatsApp
