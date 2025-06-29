@@ -59,34 +59,37 @@ const MedicationTracking = () => {
 
   const fetchAdherenceData = async (name) => {
     try {
-      const response = await apiCall(`${API_ENDPOINTS.MEDICATIONS.ADHERENCE}/${name}?days=7`);
+      const response = await apiCall(`${API_ENDPOINTS.MEDICATIONS.ADHERENCE}/${encodeURIComponent(name)}?days=7`);
       if (response.status === 'success') {
         setAdherenceData(response);
       }
     } catch (error) {
       console.error('Error fetching adherence data:', error);
+      setAdherenceData(null);
     }
   };
 
   const fetchConfirmations = async (name) => {
     try {
-      const response = await apiCall(`${API_ENDPOINTS.MEDICATIONS.CONFIRMATIONS}/${name}`);
+      const response = await apiCall(`${API_ENDPOINTS.MEDICATIONS.CONFIRMATIONS}/${encodeURIComponent(name)}`);
       if (response.status === 'success') {
         setConfirmations(response.confirmations);
       }
     } catch (error) {
       console.error('Error fetching confirmations:', error);
+      setConfirmations([]);
     }
   };
 
   const fetchTodayStatus = async (name) => {
     try {
-      const response = await apiCall(`${API_ENDPOINTS.MEDICATIONS.STATUS}/${name}`);
+      const response = await apiCall(`${API_ENDPOINTS.MEDICATIONS.STATUS}/${encodeURIComponent(name)}`);
       if (response.status === 'success') {
         setTodayStatus(response);
       }
     } catch (error) {
       console.error('Error fetching today status:', error);
+      setTodayStatus(null);
     }
   };
 
@@ -190,7 +193,7 @@ const MedicationTracking = () => {
               </div>
             </div>
 
-            {todayStatus.today_logs.length > 0 && (
+            {todayStatus.today_logs && todayStatus.today_logs.length > 0 && (
               <div className="space-y-2">
                 <h4 className="font-semibold">Today's Reminders</h4>
                 {todayStatus.today_logs.map((log, index) => (
@@ -294,7 +297,7 @@ const MedicationTracking = () => {
       )}
 
       {/* Detailed Logs */}
-      {adherenceData && adherenceData.logs.length > 0 && (
+      {adherenceData && adherenceData.logs && adherenceData.logs.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Detailed Medication Log</CardTitle>

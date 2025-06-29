@@ -14,9 +14,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
-# LangChain Imports for Vector Store (ChromaDB)
-from langchain_chroma import Chroma
+# LangChain Imports for Vector Store (Qdrant)
+from langchain_qdrant import QdrantVectorStore
 from langchain_core.documents import Document
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
 
 # LangGraph Imports
 from langgraph.graph import StateGraph, END
@@ -35,9 +37,34 @@ else:
 llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
 embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
 
-CHROMA_DB_DIRECTORY = "./chroma_db"
-# Ensure the directory exists or will be created by Chroma
-vector_store = Chroma(embedding_function=embeddings, persist_directory=CHROMA_DB_DIRECTORY)
+# Qdrant Configuration
+QDRANT_URL = os.getenv("QDRANT_URL", "https://your-cluster-url.qdrant.tech")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+COLLECTION_NAME = "medical_prescriptions"
+
+# Initialize Qdrant client
+qdrant_client = QdrantClient(
+    url=QDRANT_URL,
+    api_key=QDRANT_API_KEY,
+)
+
+# Initialize vector store
+vector_store = QdrantVectorStore(
+    client=qdrant_client,
+    collection_name=COLLECTION_NAME,
+    embedding=embeddings,
+)
+
+# Ensure collection exists
+try:
+    qdrant_client.get_collection(COLLECTION_NAME)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Qdrant collection '{COLLECTION_NAME}' exists.")
+except Exception:
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Creating Qdrant collection '{COLLECTION_NAME}'.")
+    qdrant_client.create_collection(
+        collection_name=COLLECTION_NAME,
+        vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE),
+    )
 
 # --- Data Models ---
 class Medicine(BaseModel):
@@ -114,7 +141,8 @@ async def store_prescription_data(state: PrescriptionIngestionState) -> Prescrip
                     "type": "medicine_detail",
                     "patient_name": parsed_prescription.patient_name,
                     "date": parsed_prescription.date,
-                    "user_id": user_id
+                    "user_id": user_id,
+                    "medicine_name": med.name
                 }
             ))
 
@@ -133,8 +161,11 @@ async def store_prescription_data(state: PrescriptionIngestionState) -> Prescrip
         )
         
         documents_to_add = [summary_doc] + medicine_docs
+        
+        # Add documents to Qdrant with proper metadata filtering
         vector_store.add_documents(documents_to_add)
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Prescription data stored in ChromaDB.")
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Prescription data stored in Qdrant. Added {len(documents_to_add)} documents.")
         return {"ingestion_status": "completed"}
     except Exception as e:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Error storing prescription data: {e}")
@@ -173,10 +204,30 @@ async def retrieve_information(state: PrescriptionIngestionState) -> Prescriptio
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Retrieving information for query: {state['question']}")
     query = state["question"]
     user_id = state["user_id"]
-    # Filter by user_id
-    retrieved_docs = vector_store.similarity_search(query, k=5, filter={"user_id": user_id})
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Retrieved {len(retrieved_docs)} documents.")
-    return {"retrieved_info": retrieved_docs}
+    
+    try:
+        # Use Qdrant's filtering capabilities
+        filter_condition = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="metadata.user_id",
+                    match=models.MatchValue(value=user_id)
+                )
+            ]
+        )
+        
+        # Search with user filter
+        retrieved_docs = vector_store.similarity_search(
+            query, 
+            k=5,
+            filter=filter_condition
+        )
+        
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Retrieved {len(retrieved_docs)} documents for user {user_id}.")
+        return {"retrieved_info": retrieved_docs}
+    except Exception as e:
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Error retrieving documents: {e}")
+        return {"retrieved_info": []}
 
 async def generate_response(state: PrescriptionIngestionState) -> PrescriptionIngestionState:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Generating response...")
