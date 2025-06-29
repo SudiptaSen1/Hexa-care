@@ -46,21 +46,22 @@ export default function TimeForm() {
   return (
     <Card className="max-w-xl mx-auto mt-10">
       <CardHeader>
-        <CardTitle>Edit Daily Schedule</CardTitle>
+        <CardTitle className="text-foreground">Edit Daily Schedule</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
 
         {/* Meal Times */}
         <div className="space-y-2">
-          <h3 className="font-semibold text-lg">Meal Times</h3>
+          <h3 className="font-semibold text-lg text-foreground">Meal Times</h3>
           {Object.entries(formData.meal_times).map(([key, value]) => (
             <div key={key}>
-              <Label htmlFor={key}>{key}</Label>
+              <Label htmlFor={key} className="text-foreground">{key}</Label>
               <Input
                 id={key}
                 type="time"
                 value={value}
                 onChange={(e) => handleChange('meal_times', key, e.target.value)}
+                className="bg-background text-foreground"
               />
             </div>
           ))}
@@ -68,29 +69,31 @@ export default function TimeForm() {
 
         {/* Other Key Times */}
         <div className="space-y-2">
-          <h3 className="font-semibold text-lg">Other Key Times</h3>
+          <h3 className="font-semibold text-lg text-foreground">Other Key Times</h3>
           {Object.entries(formData.other_key_times).map(([key, value]) => {
             if (key === 'snack_time') {
               return value.map((time, index) => (
                 <div key={`${key}-${index}`}>
-                  <Label htmlFor={`${key}-${index}`}>{`Snack Time ${index + 1}`}</Label>
+                  <Label htmlFor={`${key}-${index}`} className="text-foreground">{`Snack Time ${index + 1}`}</Label>
                   <Input
                     id={`${key}-${index}`}
                     type="time"
                     value={time}
                     onChange={(e) => handleChange('snack_time', key, e.target.value, index)}
+                    className="bg-background text-foreground"
                   />
                 </div>
               ));
             } else {
               return (
                 <div key={key}>
-                  <Label htmlFor={key}>{key.replace(/_/g, ' ')}</Label>
+                  <Label htmlFor={key} className="text-foreground">{key.replace(/_/g, ' ')}</Label>
                   <Input
                     id={key}
                     type="time"
                     value={value}
                     onChange={(e) => handleChange('other_key_times', key, e.target.value)}
+                    className="bg-background text-foreground"
                   />
                 </div>
               );
@@ -100,12 +103,13 @@ export default function TimeForm() {
 
         {/* Timezone */}
         <div>
-          <Label htmlFor="timezone">Timezone</Label>
+          <Label htmlFor="timezone" className="text-foreground">Timezone</Label>
           <Input
             id="timezone"
             type="text"
             value={formData.timezone}
             onChange={(e) => handleChange('timezone', 'timezone', e.target.value)}
+            className="bg-background text-foreground"
           />
         </div>
       </CardContent>

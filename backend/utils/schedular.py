@@ -2,44 +2,16 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from pymongo import MongoClient
 from datetime import datetime
 from utils.notificatiins import send_sms, send_whatsapp
-from controllers.medication_controller import log_medication_reminder
+from controllers.medication_controller import log_medication_reminder_sync
 import pytz
 import os
 from dotenv import load_dotenv
-import asyncio
 
 load_dotenv()
 
 client = MongoClient(os.getenv("MONGODB_URI"))
 db = client[os.getenv("DB_NAME", "hexacare")]
 meds = db["medications"]
-medication_logs = db["medication_logs"]
-
-def log_medication_reminder_sync(medication_id: str, patient_name: str, contact_number: str, scheduled_time: str, user_id: str = None):
-    """
-    Synchronous version of log_medication_reminder for use in scheduler
-    """
-    try:
-        log_entry = {
-            "medication_id": medication_id,
-            "patient_name": patient_name,
-            "contact_number": contact_number,
-            "scheduled_time": scheduled_time,
-            "sent_time": datetime.now(),
-            "status": "pending",
-            "response_received": False
-        }
-        
-        # Add user_id if provided
-        if user_id:
-            log_entry["user_id"] = user_id
-        
-        result = medication_logs.insert_one(log_entry)
-        print(f"✅ Logged medication reminder: {result.inserted_id}")
-        return str(result.inserted_id)
-    except Exception as e:
-        print(f"❌ Error logging medication reminder: {e}")
-        return None
 
 def check_and_send_sms():
     now = datetime.now(pytz.timezone("Asia/Kolkata"))
@@ -91,4 +63,5 @@ def start_scheduler():
     scheduler = BackgroundScheduler()
     scheduler.add_job(check_and_send_sms, 'interval', minutes=1)
     scheduler.start()
-    print("Medication reminder scheduler started successfully!")
+    print("✅ Medication reminder scheduler started successfully!")
+    return scheduler

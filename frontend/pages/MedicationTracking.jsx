@@ -12,7 +12,8 @@ import {
   Calendar,
   Pill,
   MessageSquare,
-  Loader2
+  Loader2,
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../src/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +24,7 @@ const MedicationTracking = () => {
   const [adherenceData, setAdherenceData] = useState(null);
   const [confirmations, setConfirmations] = useState([]);
   const [todayStatus, setTodayStatus] = useState(null);
+  const [activeMedications, setActiveMedications] = useState([]);
   const [loading, setLoading] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -48,7 +50,8 @@ const MedicationTracking = () => {
       await Promise.all([
         fetchAdherenceData(name),
         fetchConfirmations(name),
-        fetchTodayStatus(name)
+        fetchTodayStatus(name),
+        fetchActiveMedications(name)
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -93,6 +96,18 @@ const MedicationTracking = () => {
     }
   };
 
+  const fetchActiveMedications = async (name) => {
+    try {
+      const response = await apiCall(`${API_ENDPOINTS.PRESCRIPTIONS.GET_ACTIVE}/${encodeURIComponent(name)}`);
+      if (response.status === 'success') {
+        setActiveMedications(response.active_medications);
+      }
+    } catch (error) {
+      console.error('Error fetching active medications:', error);
+      setActiveMedications([]);
+    }
+  };
+
   const handleSearch = () => {
     fetchAllData(patientName);
   };
@@ -123,26 +138,27 @@ const MedicationTracking = () => {
     <div className="space-y-6 px-4 md:px-10 py-5">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold">Medication Tracking</h1>
-        <p className="mt-1">Monitor medication adherence and patient responses</p>
+        <h1 className="text-3xl font-bold text-foreground">Medication Tracking</h1>
+        <p className="mt-1 text-muted-foreground">Monitor medication adherence and patient responses</p>
       </div>
 
       {/* Search */}
       <Card>
         <CardHeader>
-          <CardTitle>Patient Search</CardTitle>
+          <CardTitle className="text-foreground">Patient Search</CardTitle>
           <CardDescription>Enter patient name to view medication tracking data</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-4">
             <div className="flex-1">
-              <Label htmlFor="patientName">Patient Name</Label>
+              <Label htmlFor="patientName" className="text-foreground">Patient Name</Label>
               <Input
                 id="patientName"
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
                 placeholder="Enter patient name"
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                className="bg-background text-foreground"
               />
             </div>
             <div className="flex items-end">
@@ -161,11 +177,46 @@ const MedicationTracking = () => {
         </CardContent>
       </Card>
 
+      {/* Active Medications Overview */}
+      {activeMedications.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-foreground">
+              <Activity className="h-5 w-5" />
+              Active Medications
+            </CardTitle>
+            <CardDescription>
+              Currently prescribed medications for {patientName}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3">
+              {activeMedications.map((medication, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <div>
+                    <div className="font-medium text-foreground">{medication.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {medication.dosage} • Times: {medication.times?.join(', ')}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Until: {new Date(medication.end_date).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <Badge variant="secondary">
+                    {medication.duration_days} days
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Today's Status */}
       {todayStatus && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-foreground">
               <Calendar className="h-5 w-5" />
               Today's Medication Status
             </CardTitle>
@@ -176,7 +227,7 @@ const MedicationTracking = () => {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <div className="text-center">
-                <div className="text-2xl font-bold">{todayStatus.today_summary.total}</div>
+                <div className="text-2xl font-bold text-foreground">{todayStatus.today_summary.total}</div>
                 <div className="text-sm text-muted-foreground">Total</div>
               </div>
               <div className="text-center">
@@ -195,7 +246,7 @@ const MedicationTracking = () => {
 
             {todayStatus.today_logs && todayStatus.today_logs.length > 0 && (
               <div className="space-y-2">
-                <h4 className="font-semibold">Today's Reminders</h4>
+                <h4 className="font-semibold text-foreground">Today's Reminders</h4>
                 {todayStatus.today_logs.map((log, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                     <div className="flex items-center gap-3">
@@ -203,7 +254,7 @@ const MedicationTracking = () => {
                         {getStatusIcon(log.status)}
                       </div>
                       <div>
-                        <div className="font-medium">{log.scheduled_time}</div>
+                        <div className="font-medium text-foreground">{log.scheduled_time}</div>
                         <div className="text-sm text-muted-foreground">
                           Sent: {new Date(log.sent_time).toLocaleTimeString()}
                         </div>
@@ -225,7 +276,7 @@ const MedicationTracking = () => {
         <div className="grid md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-foreground">
                 <TrendingUp className="h-5 w-5" />
                 7-Day Adherence Rate
               </CardTitle>
@@ -258,7 +309,7 @@ const MedicationTracking = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-foreground">
                 <MessageSquare className="h-5 w-5" />
                 Recent Confirmations
               </CardTitle>
@@ -274,7 +325,7 @@ const MedicationTracking = () => {
                           {confirmation.is_taken ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
                         </div>
                         <div>
-                          <div className="font-medium">{confirmation.scheduled_time}</div>
+                          <div className="font-medium text-foreground">{confirmation.scheduled_time}</div>
                           <div className="text-sm text-muted-foreground">
                             {new Date(confirmation.confirmation_time).toLocaleDateString()}
                           </div>
@@ -300,7 +351,7 @@ const MedicationTracking = () => {
       {adherenceData && adherenceData.logs && adherenceData.logs.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Detailed Medication Log</CardTitle>
+            <CardTitle className="text-foreground">Detailed Medication Log</CardTitle>
             <CardDescription>Complete history of medication reminders and responses</CardDescription>
           </CardHeader>
           <CardContent>
@@ -312,7 +363,7 @@ const MedicationTracking = () => {
                       {getStatusIcon(log.status)}
                     </div>
                     <div>
-                      <div className="font-medium">{log.scheduled_time}</div>
+                      <div className="font-medium text-foreground">{log.scheduled_time}</div>
                       <div className="text-sm text-muted-foreground">
                         Sent: {new Date(log.sent_time).toLocaleString()}
                         {log.response_time && (
@@ -341,7 +392,7 @@ const MedicationTracking = () => {
         <Card>
           <CardContent className="text-center py-8">
             <Pill className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Medication Data Found</h3>
+            <h3 className="text-lg font-semibold mb-2 text-foreground">No Medication Data Found</h3>
             <p className="text-muted-foreground mb-4">
               No medication tracking data found for "{patientName}". 
               Make sure you have uploaded prescriptions and set up medication reminders.
