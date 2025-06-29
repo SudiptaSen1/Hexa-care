@@ -43,9 +43,14 @@ export const Dashboard = () => {
     try {
       setLoading(true);
       
-      // Load user's prescriptions directly from MongoDB
+      // Load user's prescriptions
       const prescriptionsResponse = await apiCall(
         `${API_ENDPOINTS.PRESCRIPTIONS.GET_USER}/${user.username}`
+      );
+      
+      // Load active medications
+      const medicationsResponse = await apiCall(
+        `${API_ENDPOINTS.PRESCRIPTIONS.GET_ACTIVE}/${user.username}`
       );
       
       // Load medication status
@@ -60,7 +65,7 @@ export const Dashboard = () => {
 
       setDashboardData({
         prescriptions: prescriptionsResponse.prescriptions || [],
-        activeMedications: [], // We'll populate this from prescriptions
+        activeMedications: medicationsResponse.active_medications || [],
         medicationStatus: statusResponse,
         chatSessions: sessionsResponse.sessions || []
       });
@@ -83,7 +88,7 @@ export const Dashboard = () => {
       <div className="flex items-center justify-center min-h-[400px]">
         <Card className="w-96">
           <CardHeader>
-            <CardTitle>Access Required</CardTitle>
+            <CardTitle className="text-foreground">Access Required</CardTitle>
             <CardDescription>Please sign in to view your dashboard</CardDescription>
           </CardHeader>
           <CardContent>
@@ -110,9 +115,9 @@ export const Dashboard = () => {
       color: 'text-blue-600',
     },
     {
-      title: 'Total Medications',
-      value: dashboardData.prescriptions.reduce((total, p) => total + (p.medicines?.length || 0), 0).toString(),
-      change: 'Prescribed',
+      title: 'Active Medications',
+      value: dashboardData.activeMedications.length.toString(),
+      change: 'Active',
       icon: Syringe,
       color: 'text-green-600',
     },
@@ -142,8 +147,8 @@ export const Dashboard = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Welcome back, {user?.username}!</h1>
-          <p className="mt-1">Here's your health monitoring overview.</p>
+          <h1 className="text-3xl font-bold text-foreground">Welcome back, {user?.username}!</h1>
+          <p className="mt-1 text-muted-foreground">Here's your health monitoring overview.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => navigate('/upload')} size="sm">
@@ -162,11 +167,11 @@ export const Dashboard = () => {
         {stats.map((stat, index) => (
           <Card key={index} className="hover:shadow-lg transition-shadow duration-200">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
+              <CardTitle className="text-sm font-medium text-foreground">{stat.title}</CardTitle>
               <stat.icon className={`h-4 w-4 ${stat.color}`} />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
+              <div className="text-2xl font-bold text-foreground">{stat.value}</div>
               <p className="text-xs text-muted-foreground">{stat.change}</p>
             </CardContent>
           </Card>
@@ -175,7 +180,7 @@ export const Dashboard = () => {
 
       {/* Quick Actions */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+        <h2 className="text-xl font-semibold mb-4 text-foreground">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
           {/* Upload Prescription */}
@@ -184,7 +189,7 @@ export const Dashboard = () => {
             className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-lg font-medium">Upload Prescription</CardTitle>
+              <CardTitle className="text-lg font-medium text-foreground">Upload Prescription</CardTitle>
               <Upload className="h-5 w-5 text-primary" />
             </CardHeader>
             <CardContent>
@@ -200,7 +205,7 @@ export const Dashboard = () => {
             className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-lg font-medium">AI Health Assistant</CardTitle>
+              <CardTitle className="text-lg font-medium text-foreground">AI Health Assistant</CardTitle>
               <Brain className="h-5 w-5 text-primary" />
             </CardHeader>
             <CardContent>
@@ -216,7 +221,7 @@ export const Dashboard = () => {
             className="cursor-pointer hover:shadow-lg transition-shadow duration-200"
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-lg font-medium">Medication Tracking</CardTitle>
+              <CardTitle className="text-lg font-medium text-foreground">Medication Tracking</CardTitle>
               <Activity className="h-5 w-5 text-primary" />
             </CardHeader>
             <CardContent>
@@ -233,31 +238,31 @@ export const Dashboard = () => {
         {/* Recent Prescriptions */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-foreground">
               <FileHeart className="h-5 w-5" />
               Recent Prescriptions
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="text-center py-4">Loading...</div>
+              <div className="text-center py-4 text-muted-foreground">Loading...</div>
             ) : dashboardData.prescriptions.length > 0 ? (
               <div className="space-y-3">
                 {dashboardData.prescriptions.slice(0, 3).map((prescription, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                     <div>
-                      <div className="font-medium">{prescription.patient_name || 'Unknown Patient'}</div>
+                      <div className="font-medium text-foreground">{prescription.patient_name || 'Unknown Patient'}</div>
                       <div className="text-sm text-muted-foreground">
-                        {prescription.date || 'Unknown Date'}
+                        {prescription.upload_date ? new Date(prescription.upload_date).toLocaleDateString() : 'Unknown Date'}
                       </div>
-                      {prescription.diagnosis && (
+                      {prescription.parsed_data?.diagnosis && (
                         <div className="text-xs text-muted-foreground">
-                          {prescription.diagnosis}
+                          {prescription.parsed_data.diagnosis}
                         </div>
                       )}
                     </div>
                     <Badge variant="secondary">
-                      {prescription.medicines?.length || 0} meds
+                      {prescription.parsed_data?.medicines?.length || 0} meds
                     </Badge>
                   </div>
                 ))}
@@ -278,14 +283,14 @@ export const Dashboard = () => {
         {/* Today's Medication Status */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-foreground">
               <Calendar className="h-5 w-5" />
               Today's Medications
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="text-center py-4">Loading...</div>
+              <div className="text-center py-4 text-muted-foreground">Loading...</div>
             ) : dashboardData.medicationStatus ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-3 gap-4 text-center">

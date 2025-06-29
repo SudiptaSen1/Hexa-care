@@ -6,6 +6,7 @@ from routes.medication_routes import router as medication_router
 from routes.prescription_routes import router as prescription_router
 from routes.chat_routes import router as chat_router
 from routes.twilio_webhook import router as twilio_router
+from utils.schedular import start_scheduler
 
 app = FastAPI(title="MedTracker API", version="1.0.0")
 
@@ -25,6 +26,11 @@ app.include_router(medication_router, prefix="/api/medications", tags=["Medicati
 app.include_router(prescription_router, prefix="/api/prescriptions", tags=["Prescriptions"])
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 app.include_router(twilio_router, prefix="/api/twilio", tags=["Twilio"])
+
+@app.on_event("startup")
+async def startup_event():
+    """Start the medication reminder scheduler on app startup"""
+    start_scheduler()
 
 @app.get("/")
 async def root():

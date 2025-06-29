@@ -2,7 +2,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from pymongo import MongoClient
 from datetime import datetime
 from utils.notificatiins import send_sms, send_whatsapp
-from controllers.medication_controller import log_medication_reminder
+from controllers.medication_controller import log_medication_reminder_sync
 import pytz
 import os
 from dotenv import load_dotenv
