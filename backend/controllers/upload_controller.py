@@ -10,10 +10,7 @@ import google.generativeai as genai
 from fastapi import UploadFile, HTTPException
 from pdf2image import convert_from_bytes
 from PIL import Image
-from cloudinary.uploader import upload
-
-# Import the RAG pipeline
-from rag_pipeline.summary_graph import ingestion_graph, PrescriptionIngestionState
+from utils.db import db
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,33 +25,9 @@ genai.configure(api_key=GENAI_API_KEY)
 # Initialize the Generative Model
 gemini_vision_model = genai.GenerativeModel("gemini-2.5-flash")
 
-async def upload_file_logic(file: UploadFile):
-    try:
-        file_bytes = await file.read()
-        file_stream = BytesIO(file_bytes)
-        file_ext = file.filename.split('.')[-1].lower()
-        public_id = f"uploads/{uuid.uuid4()}"
-
-        # Choose resource type
-        resource_type = "auto" if file_ext == "pdf" else "image"
-
-        result = upload(
-            file_stream,
-            resource_type=resource_type,
-            public_id=public_id,
-            overwrite=True,
-            filename=file.filename
-        )
-
-        return {
-            "filename": file.filename,
-            "url": result.get("secure_url"),
-            "public_id": result.get("public_id"),
-            "resource_type": result.get("resource_type")
-        }
-
-    except Exception as e:
-        raise Exception(f"Cloudinary upload failed: {str(e)}")
+# MongoDB collections
+prescriptions_collection = db["prescriptions"]
+user_summaries_collection = db["user_summaries"]
 
 async def process_file_with_vision(file_bytes: bytes, file_ext: str):
     """
@@ -112,6 +85,69 @@ The desired JSON structure is:
         logger.error(f"Gemini Vision Pro extraction failed: {e}")
         raise HTTPException(status_code=500, detail="AI model failed to extract information from the document.")
 
+async def store_prescription_in_db(extracted_data: dict, user_id: str):
+    """Store prescription data in MongoDB"""
+    try:
+        prescription_record = {
+            "user_id": user_id,
+            "patient_name": extracted_data.get("patient_name", ""),
+            "age": extracted_data.get("age", ""),
+            "date": extracted_data.get("date", ""),
+            "medicines": extracted_data.get("medicines", []),
+            "diagnosis": extracted_data.get("diagnosis", ""),
+            "doctor_instructions": extracted_data.get("doctor_instructions", []),
+            "upload_date": datetime.utcnow(),
+            "created_at": datetime.utcnow()
+        }
+        
+        result = await prescriptions_collection.insert_one(prescription_record)
+        logger.info(f"Stored prescription with ID: {result.inserted_id}")
+        return str(result.inserted_id)
+    except Exception as e:
+        logger.error(f"Error storing prescription: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to store prescription: {e}")
+
+async def generate_summary(extracted_data: dict) -> str:
+    """Generate a user-friendly summary of the prescription"""
+    try:
+        summary_parts = []
+        
+        if extracted_data.get("patient_name"):
+            summary_parts.append(f"**Patient:** {extracted_data['patient_name']}")
+        
+        if extracted_data.get("age"):
+            summary_parts.append(f"**Age:** {extracted_data['age']}")
+            
+        if extracted_data.get("date"):
+            summary_parts.append(f"**Date:** {extracted_data['date']}")
+            
+        if extracted_data.get("diagnosis"):
+            summary_parts.append(f"**Diagnosis:** {extracted_data['diagnosis']}")
+        
+        medicines = extracted_data.get("medicines", [])
+        if medicines:
+            summary_parts.append("**Medications:**")
+            for med in medicines:
+                med_line = f"- {med.get('name', 'Unknown medication')}"
+                if med.get('dosage'):
+                    med_line += f": {med['dosage']}"
+                if med.get('duration'):
+                    med_line += f" for {med['duration']}"
+                if med.get('notes'):
+                    med_line += f" ({med['notes']})"
+                summary_parts.append(med_line)
+        
+        instructions = extracted_data.get("doctor_instructions", [])
+        if instructions:
+            summary_parts.append("**Doctor's Instructions:**")
+            for instruction in instructions:
+                summary_parts.append(f"- {instruction}")
+        
+        return "\n".join(summary_parts)
+    except Exception as e:
+        logger.error(f"Error generating summary: {e}")
+        return "Summary could not be generated."
+
 async def upload_prescription_and_process(file_bytes: bytes, file_ext: str, user_id: str):
     try:
         logger.info(f"Upload started for user_id: {user_id}. File extension: {file_ext}, Size: {len(file_bytes)} bytes.")
@@ -128,42 +164,23 @@ async def upload_prescription_and_process(file_bytes: bytes, file_ext: str, user
             logger.error(f"AI extraction failed to produce valid JSON for user_id: {user_id}. Output: {extracted_json_str}")
             raise HTTPException(status_code=500, detail="The AI model could not structure the extracted data correctly. Please try a clearer image.")
 
-        # Step 2: Pass data to LangGraph for parsing, storing, and summarizing
-        initial_state: PrescriptionIngestionState = {
-            "user_id": user_id,
-            "session_id": None,
-            "prescription_text": extracted_json_str,
-            "chat_history": [],
-            "question": "",
-            "answer": "",
-            "retrieved_info": [],
-            "parsed_prescription": None,
-            "user_summary": None,
-            "ingestion_status": "started",
-        }
-        logger.info(f"Invoking ingestion graph for user_id: {user_id}.")
-
-        final_ingestion_state = await ingestion_graph.ainvoke(initial_state)
-        logger.info(f"Graph invocation complete for user_id: {user_id}. Final status: {final_ingestion_state.get('ingestion_status')}")
-
-        ingestion_status = final_ingestion_state.get("ingestion_status", "unknown")
-        user_summary = final_ingestion_state.get("user_summary")
+        # Step 2: Store in MongoDB
+        prescription_id = await store_prescription_in_db(extracted_data, user_id)
         
-        if "completed" in ingestion_status:
-            logger.info(f"Processing completed successfully for user_id: {user_id}.")
-            return {
-                "filename": "prescription.jpg",
-                "url": "N/A",
-                "public_id": user_id,
-                "resource_type": "image",
-                "extracted_json": extracted_data,
-                "summary": user_summary,
-                "error": None
-            }
-        else:
-            error_detail = f"Processing failed after data extraction. Status: {ingestion_status}"
-            logger.error(f"{error_detail} for user_id: {user_id}")
-            raise HTTPException(status_code=500, detail=error_detail)
+        # Step 3: Generate summary
+        summary = await generate_summary(extracted_data)
+        
+        logger.info(f"Processing completed successfully for user_id: {user_id}.")
+        return {
+            "filename": "prescription.jpg",
+            "url": "N/A",
+            "public_id": user_id,
+            "resource_type": "image",
+            "extracted_json": extracted_data,
+            "summary": summary,
+            "prescription_id": prescription_id,
+            "error": None
+        }
 
     except HTTPException as http_e:
         raise http_e

@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Form, Header
 from controllers.medication_controller import (
     process_medication_response, 
     get_medication_adherence, 
-    get_recent_confirmations
+    get_recent_confirmations,
+    get_medication_status
 )
 
 router = APIRouter()
@@ -41,52 +42,11 @@ async def get_confirmations(
     return await get_recent_confirmations(patient_name, limit, user_id)
 
 @router.get("/medication-status/{patient_name}")
-async def get_medication_status(
+async def get_medication_status_endpoint(
     patient_name: str,
     user_id: str = Header(None, alias="X-User-ID")
 ):
     """
     Get current medication status overview for a patient
     """
-    try:
-        from utils.db import db
-        from datetime import datetime, timedelta
-        
-        medication_logs_collection = db["medication_logs"]
-        
-        # Get today's medication logs
-        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        tomorrow = today + timedelta(days=1)
-        
-        # Build query with user_id filter if provided
-        query = {
-            "patient_name": patient_name,
-            "sent_time": {"$gte": today, "$lt": tomorrow}
-        }
-        if user_id:
-            query["user_id"] = user_id
-        
-        today_logs = []
-        async for log in medication_logs_collection.find(query).sort("sent_time", 1):
-            log["_id"] = str(log["_id"])
-            today_logs.append(log)
-        
-        taken_today = len([log for log in today_logs if log["status"] == "taken"])
-        missed_today = len([log for log in today_logs if log["status"] == "missed"])
-        pending_today = len([log for log in today_logs if log["status"] == "pending"])
-        
-        return {
-            "status": "success",
-            "patient_name": patient_name,
-            "date": today.strftime("%Y-%m-%d"),
-            "today_summary": {
-                "total": len(today_logs),
-                "taken": taken_today,
-                "missed": missed_today,
-                "pending": pending_today
-            },
-            "today_logs": today_logs
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting medication status: {str(e)}")
+    return await get_medication_status(patient_name, user_id)

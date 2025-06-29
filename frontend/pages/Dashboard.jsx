@@ -43,14 +43,9 @@ export const Dashboard = () => {
     try {
       setLoading(true);
       
-      // Load user's prescriptions
+      // Load user's prescriptions directly from MongoDB
       const prescriptionsResponse = await apiCall(
         `${API_ENDPOINTS.PRESCRIPTIONS.GET_USER}/${user.username}`
-      );
-      
-      // Load active medications
-      const medicationsResponse = await apiCall(
-        `${API_ENDPOINTS.PRESCRIPTIONS.GET_ACTIVE}/${user.username}`
       );
       
       // Load medication status
@@ -65,12 +60,19 @@ export const Dashboard = () => {
 
       setDashboardData({
         prescriptions: prescriptionsResponse.prescriptions || [],
-        activeMedications: medicationsResponse.active_medications || [],
+        activeMedications: [], // We'll populate this from prescriptions
         medicationStatus: statusResponse,
         chatSessions: sessionsResponse.sessions || []
       });
     } catch (error) {
       console.error('Error loading dashboard data:', error);
+      // Set empty data on error to prevent crashes
+      setDashboardData({
+        prescriptions: [],
+        activeMedications: [],
+        medicationStatus: null,
+        chatSessions: []
+      });
     } finally {
       setLoading(false);
     }
@@ -99,7 +101,7 @@ export const Dashboard = () => {
       title: 'Total Prescriptions',
       value: dashboardData.prescriptions.length.toString(),
       change: '+' + dashboardData.prescriptions.filter(p => {
-        const uploadDate = new Date(p.upload_date);
+        const uploadDate = new Date(p.upload_date || p.created_at);
         const weekAgo = new Date();
         weekAgo.setDate(weekAgo.getDate() - 7);
         return uploadDate > weekAgo;
@@ -108,9 +110,9 @@ export const Dashboard = () => {
       color: 'text-blue-600',
     },
     {
-      title: 'Active Medications',
-      value: dashboardData.activeMedications.length.toString(),
-      change: 'Active',
+      title: 'Total Medications',
+      value: dashboardData.prescriptions.reduce((total, p) => total + (p.medicines?.length || 0), 0).toString(),
+      change: 'Prescribed',
       icon: Syringe,
       color: 'text-green-600',
     },
@@ -244,13 +246,18 @@ export const Dashboard = () => {
                 {dashboardData.prescriptions.slice(0, 3).map((prescription, index) => (
                   <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                     <div>
-                      <div className="font-medium">{prescription.patient_name}</div>
+                      <div className="font-medium">{prescription.patient_name || 'Unknown Patient'}</div>
                       <div className="text-sm text-muted-foreground">
-                        {new Date(prescription.upload_date).toLocaleDateString()}
+                        {prescription.date || 'Unknown Date'}
                       </div>
+                      {prescription.diagnosis && (
+                        <div className="text-xs text-muted-foreground">
+                          {prescription.diagnosis}
+                        </div>
+                      )}
                     </div>
                     <Badge variant="secondary">
-                      {prescription.parsed_data?.medicines?.length || 0} meds
+                      {prescription.medicines?.length || 0} meds
                     </Badge>
                   </div>
                 ))}
@@ -284,19 +291,19 @@ export const Dashboard = () => {
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
                     <div className="text-2xl font-bold text-green-600">
-                      {dashboardData.medicationStatus.today_summary.taken}
+                      {dashboardData.medicationStatus.today_summary?.taken || 0}
                     </div>
                     <div className="text-xs text-muted-foreground">Taken</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-red-600">
-                      {dashboardData.medicationStatus.today_summary.missed}
+                      {dashboardData.medicationStatus.today_summary?.missed || 0}
                     </div>
                     <div className="text-xs text-muted-foreground">Missed</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-yellow-600">
-                      {dashboardData.medicationStatus.today_summary.pending}
+                      {dashboardData.medicationStatus.today_summary?.pending || 0}
                     </div>
                     <div className="text-xs text-muted-foreground">Pending</div>
                   </div>
