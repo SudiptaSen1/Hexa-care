@@ -6,7 +6,7 @@ import { Label } from '../components/ui/label';
 import { UploadCloud, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../src/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { apiCall, API_ENDPOINTS, API_BASE } from '../src/config/api';
+import { API_BASE, API_ENDPOINTS } from '../src/config/api';
 
 const Upload = () => {
   const fileInputRef = useRef(null);
@@ -15,31 +15,12 @@ const Upload = () => {
   const [uploadResult, setUploadResult] = useState(null);
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  
-  const [userSchedule, setUserSchedule] = useState({
-    patient_name: user?.username || '',
-    contact_number: '',
-    wake_up_time: '07:00',
-    breakfast_time: '08:00',
-    lunch_time: '13:00',
-    dinner_time: '20:00',
-    sleep_time: '22:00'
-  });
 
   React.useEffect(() => {
     if (!isAuthenticated) {
       navigate('/login');
     }
   }, [isAuthenticated, navigate]);
-
-  React.useEffect(() => {
-    if (user?.username) {
-      setUserSchedule(prev => ({
-        ...prev,
-        patient_name: user.username
-      }));
-    }
-  }, [user]);
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -57,21 +38,9 @@ const Upload = () => {
     fileInputRef.current?.click();
   };
 
-  const handleScheduleChange = (field, value) => {
-    setUserSchedule(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
   const handleSubmit = async () => {
     if (!selectedFile) {
       alert('Please select a file to upload.');
-      return;
-    }
-
-    if (!userSchedule.patient_name || !userSchedule.contact_number) {
-      alert('Please fill in patient name and contact number.');
       return;
     }
 
@@ -81,8 +50,6 @@ const Upload = () => {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('user_id', user.user_id);
-      formData.append('user_schedule_json', JSON.stringify(userSchedule));
 
       const response = await fetch(`${API_BASE}${API_ENDPOINTS.PRESCRIPTIONS.UPLOAD}`, {
         method: 'POST',
@@ -156,92 +123,6 @@ const Upload = () => {
                   {selectedFile.name}
                 </div>
               )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Patient Schedule Card */}
-        <Card className="shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-xl">Patient Schedule</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="patient_name">Patient Name *</Label>
-                <Input
-                  id="patient_name"
-                  value={userSchedule.patient_name}
-                  onChange={(e) => handleScheduleChange('patient_name', e.target.value)}
-                  placeholder="Enter patient name"
-                  required
-                  disabled={isUploading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="contact_number">Contact Number *</Label>
-                <Input
-                  id="contact_number"
-                  value={userSchedule.contact_number}
-                  onChange={(e) => handleScheduleChange('contact_number', e.target.value)}
-                  placeholder="+1234567890"
-                  required
-                  disabled={isUploading}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="wake_up_time">Wake Up Time</Label>
-                <Input
-                  id="wake_up_time"
-                  type="time"
-                  value={userSchedule.wake_up_time}
-                  onChange={(e) => handleScheduleChange('wake_up_time', e.target.value)}
-                  disabled={isUploading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="breakfast_time">Breakfast Time</Label>
-                <Input
-                  id="breakfast_time"
-                  type="time"
-                  value={userSchedule.breakfast_time}
-                  onChange={(e) => handleScheduleChange('breakfast_time', e.target.value)}
-                  disabled={isUploading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="lunch_time">Lunch Time</Label>
-                <Input
-                  id="lunch_time"
-                  type="time"
-                  value={userSchedule.lunch_time}
-                  onChange={(e) => handleScheduleChange('lunch_time', e.target.value)}
-                  disabled={isUploading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dinner_time">Dinner Time</Label>
-                <Input
-                  id="dinner_time"
-                  type="time"
-                  value={userSchedule.dinner_time}
-                  onChange={(e) => handleScheduleChange('dinner_time', e.target.value)}
-                  disabled={isUploading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="sleep_time">Sleep Time</Label>
-                <Input
-                  id="sleep_time"
-                  type="time"
-                  value={userSchedule.sleep_time}
-                  onChange={(e) => handleScheduleChange('sleep_time', e.target.value)}
-                  disabled={isUploading}
-                />
-              </div>
             </div>
 
             <Button 
